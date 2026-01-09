@@ -1,7 +1,7 @@
 # Backup Tool (Python)
 
 A simple backup utility written in Python.
-The project is created as a learning and portfolio project.
+Project created as a learning project with focus on clean code and filesystem operations.
 
 ## Features
 - Recursive folder scanning
