@@ -42,3 +42,15 @@ def scan_folder(folder_path: Path, on_progress=None):
         "total_size": total_size,
         "processed": processed,
     }
+
+
+def count_files(folder_path: Path) -> int:
+    count = 0
+
+    for path in folder_path.rglob("*"):
+        if path.is_file():
+            if any(ignored in path.parts for ignored in IGNORE_DIRS):
+                continue
+            count += 1
+
+    return count
