@@ -1,4 +1,19 @@
+import logging
 from pathlib import Path
+
+# Create logs directory if it doesn't exist
+BASE_DIR = Path(__file__).resolve().parent
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+LOG_FILE = LOG_DIR / "backup.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.FileHandler(LOG_FILE, encoding="utf-8"), logging.StreamHandler()],
+)
 
 # Add ignored directories
 IGNORE_DIRS = {
@@ -15,10 +30,10 @@ while True:
     folder_path = Path(input("Please enter the path of your folder: "))
 
     if folder_path.is_dir():
-        print("Folder is exist. Selected folder:", folder_path)
+        logging.info(f"Selected folder: {folder_path}")
         break
     else:
-        print("It's not a folder. You need select path to folder.\n")
+        logging.warning("Invalid folder path entered")
 
 
 # The following function scans the folder and calculates the number of files and their total weight according to the criteria.
@@ -46,5 +61,5 @@ def scan_folder(folder_path):
 
 scan_result = scan_folder(folder_path)
 
-print(f"Total files: {len(scan_result['files'])}")
-print(f"Total size: {scan_result['total_size'] / 1024 / 1024:.2f} MB")
+logging.info(f"Total files: {len(scan_result['files'])}")
+logging.info(f"Total size: {scan_result['total_size'] / 1024 / 1024:.2f} MB")
