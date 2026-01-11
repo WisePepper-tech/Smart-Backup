@@ -2,6 +2,7 @@ import logging
 import time
 from pathlib import Path
 from scanner import scan_folder, count_files
+from copier import copy_with_versions
 
 # Progress in percent
 PROGRESS_STEP_PERCENT = 5
@@ -34,6 +35,15 @@ while True:
     else:
         logging.warning("Invalid folder path entered")
 
+# Ask for backup destination
+while True:
+    backup_root = Path(input("Please enter BACKUP destination folder: "))
+
+    if backup_root.exists():
+        logging.info(f"Backup destination: {backup_root}")
+        break
+    else:
+        logging.warning("Invalid backup destination path")
 
 # Calculate total quantity files
 total_files = count_files(folder_path)
@@ -57,6 +67,17 @@ scan_result = scan_folder(folder_path, on_progress=progress_callback)
 
 logging.info(f"Total files: {len(scan_result['files'])}")
 logging.info(f"Total size: {scan_result['total_size'] / 1024 / 1024:.2f} MB")
+
+copy_result = copy_with_versions(
+    files=scan_result["files"],
+    source_root=folder_path,
+    backup_root=backup_root
+)
+
+logging.info(
+    f"Copied: {copy_result['copied']}, "
+    f"Versions created: {copy_result['versions_created']}"
+)
 
 # Finish
 duration = time.perf_counter() - start_time

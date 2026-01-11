@@ -32,6 +32,7 @@ python main.py
 Planned features:
 - File type filtering
 - Backup copy to another directory
+- overwrite policy
 - Logging
 - Configuration file
 
