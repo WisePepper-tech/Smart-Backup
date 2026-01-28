@@ -10,7 +10,7 @@ parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
 
 # logging setup
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger("backup")
 
 start_time = time.perf_counter()
@@ -63,9 +63,9 @@ result = run_backup(
 
 if isinstance(result, DryRunResult):
     logger.info("DRY-RUN execution plan:")
-    logger.info(f"  Planned copies: {result.planned_copies}")
-    logger.info(f"  Planned versions: {result.planned_versions}")
-    logger.info(f"  Planned skips: {result.planned_skips}")
+    logger.info(f"Planned copies: {result.planned_copies}")
+    logger.info(f"Planned versions: {result.planned_versions}")
+    logger.info(f"Planned skips: {result.planned_skips}")
 else:
     logger.info(f"Copied: {result.copied}")
     logger.info(f"Skipped: {result.skipped}")

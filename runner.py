@@ -5,6 +5,8 @@ from typing import Callable, Optional
 from scanner import scan_folder, count_files
 from copier import copy_files
 from models import ScanResult, CopyResult, ProgressEvent, DryRunResult
+import os
+from encryptor import encrypt_file
 
 
 def run_backup(
@@ -13,8 +15,15 @@ def run_backup(
     dry_run: bool = False,
     on_progress: Optional[Callable[[ProgressEvent], None]] = None,
     logger=None,
-) -> CopyResult:
+) -> CopyResult | DryRunResult:
     logger = logger or logging.getLogger(__name__)
+
+    key = None
+    if not dry_run:
+        key = os.getenv("BACKUP_ENCRYPTION_KEY")
+        if not key:
+            raise RuntimeError("BACKUP_ENCRYPTION_KEY is not set")
+        key = key.encode()
 
     total_files = count_files(source)
 
@@ -43,11 +52,25 @@ def run_backup(
     )
 
     if copy_stats.get("dry_run"):
+        logger.info("[DRY-RUN] Encryption step skipped")
+        logger.debug("[DRY-RUN] Listing files planned for encryption")
+        
+        for path in destination.rglob("*"):
+            if path.is_file():
+                logger.debug(
+                    f"[DRY-RUN] Would encrypt file: " f"{path.relative_to(destination)}"
+                )
+
         return DryRunResult(
             planned_copies=copy_stats["planned_copies"],
             planned_versions=copy_stats["planned_versions"],
             planned_skips=copy_stats["planned_skips"],
         )
+    logger.info("Encrypting backup files")
+
+    for path in destination.rglob("*"):
+        if path.is_file():
+            encrypt_file(path, key)
 
     return CopyResult(
         copied=copy_stats["copied"],
