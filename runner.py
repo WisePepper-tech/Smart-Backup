@@ -7,6 +7,7 @@ from copier import copy_files
 from models import ScanResult, CopyResult, ProgressEvent, DryRunResult
 import os
 from encryptor import encrypt_file
+from storage.s3 import S3Storage
 
 
 def run_backup(
@@ -20,6 +21,7 @@ def run_backup(
 
     key = None
     if not dry_run:
+        logger.info("Backup scan started")
         key = os.getenv("BACKUP_ENCRYPTION_KEY")
         if not key:
             raise RuntimeError("BACKUP_ENCRYPTION_KEY is not set")
@@ -52,13 +54,15 @@ def run_backup(
     )
 
     if copy_stats.get("dry_run"):
-        logger.info("[DRY-RUN] Encryption step skipped")
-        logger.debug("[DRY-RUN] Listing files planned for encryption")
-        
+        logger.info("DRY-RUN enabled: filesystem will not be modified")
+
         for path in destination.rglob("*"):
             if path.is_file():
-                logger.debug(
-                    f"[DRY-RUN] Would encrypt file: " f"{path.relative_to(destination)}"
+                logger.info(
+                    "Planned copies: %d, versions: %d, skips: %d",
+                    copy_stats["planned_copies"],
+                    copy_stats["planned_versions"],
+                    copy_stats["planned_skips"],
                 )
 
         return DryRunResult(
@@ -66,11 +70,39 @@ def run_backup(
             planned_versions=copy_stats["planned_versions"],
             planned_skips=copy_stats["planned_skips"],
         )
-    logger.info("Encrypting backup files")
+
+    logger.info("Encrypting is started")
 
     for path in destination.rglob("*"):
-        if path.is_file():
-            encrypt_file(path, key)
+        if not path.is_file():
+            continue
+
+        logger.debug("Encrypting file: %s", path)
+        encrypt_file(path, key)
+
+    logger.info("Encrypting is complete")
+
+    s3 = S3Storage(
+        bucket=os.getenv("BACKUP_S3_BUCKET"),
+        endpoint_url=os.getenv("BACKUP_S3_ENDPOINT"),
+        access_key=os.getenv("AWS_ACCESS_KEY_ID"),
+        secret_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+
+    if not s3.bucket:
+        raise RuntimeError("BACKUP_S3_BUCKET is not set")
+
+    logger.info("Uploading files to S3 bucket '%s'", s3.bucket)
+
+    for file_path in destination.rglob("*"):
+        if not file_path.is_file():
+            continue
+
+        remote_key = str(file_path.relative_to(destination))
+        logger.debug("Uploading %s -> s3://%s/%s", file_path, s3.bucket, remote_key)
+        s3.upload_file(file_path, remote_key)
+
+    logger.info("Upload completed")
 
     return CopyResult(
         copied=copy_stats["copied"],

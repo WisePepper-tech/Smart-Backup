@@ -1,8 +1,13 @@
+from dotenv import load_dotenv
 import logging
+import os
 import time
 from pathlib import Path
 import argparse
 from runner import run_backup, DryRunResult
+from restore import run_restore
+
+load_dotenv()
 
 # Argument parsing (CLI)
 parser = argparse.ArgumentParser()
@@ -10,7 +15,11 @@ parser.add_argument("--dry-run", action="store_true")
 args = parser.parse_args()
 
 # logging setup
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+LOGLEVEL = os.getenv("LOGLEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOGLEVEL,
+    format="%(levelname)s:%(name)s:%(message)s",
+)
 logger = logging.getLogger("backup")
 
 start_time = time.perf_counter()
@@ -60,6 +69,14 @@ result = run_backup(
     on_progress=progress_callback,
     logger=logging.getLogger("backup"),
 )
+
+if __name__ == "__main__":
+    restore_dir = Path("C:/COPY_restore")
+
+    run_restore(
+        destination=restore_dir,
+        prefix="",
+    )
 
 if isinstance(result, DryRunResult):
     logger.info("DRY-RUN execution plan:")
