@@ -1,40 +1,51 @@
-# Backup Tool (Python)
+## DISCLAIMER:
 
-A simple backup utility written in Python.
-Project created as a learning project with focus on clean code and filesystem operations.
+This tool is provided as-is. Always test backups before relying on them in production.
 
-## Features
-- Recursive folder scanning
-- File count calculation
-- Total size calculation
-- Uses pathlib (modern Python approach)
+## 1. Project Description
 
-## How it works
-1. User selects a folder
-2. Program scans all subdirectories
-3. Files are collected
-4. Total size is calculated
+Smart-Backup is a security-focused local backup utility with optional compression and AEAD encryption.
 
-## Example output
-Total files: 152  
-Total size: 11.40 MB
+## 2. Key Features
 
-## Requirements
-- Python 3.10+
+- Versioned backup structure
 
-## How to run
-```bash
-python main.py
+- JSON metadata tracking
 
-## Project status
-🚧 In progress
+- Optional compression + padding
 
-Planned features:
-- File type filtering
-- Backup copy to another directory
-- overwrite policy
-- Logging
-- Configuration file
+- Optional AEAD encryption (ChaCha20-Poly1305)
 
-## Author
-WisePepper-tech
+- Deterministic restore modes
+
+- Integrity verification (SHA-256)
+
+## 3. Architecture Overview
+
+- Single storage directory
+
+- Project-based versioning
+
+- Timestamped snapshots
+
+- Metadata-driven restore
+
+## 4. Security Model
+
+- No telemetry
+
+- No remote communication
+
+- Encryption keys never leave local machine
+
+- Restore possible in raw or decrypted mode
+
+## 5. Technical Workflow
+
+The backup process follows a strict pipeline to ensure data integrity and confidentiality:
+
+1. **Scanning**: `scanner.py` generates SHA-256 hashes for all source files.
+2. **Compression**: Optional Zlib compression (skipped for media/archives).
+3. **Padding**: Random noise added to reach 256-bit block alignment (Traffic Analysis protection).
+4. **Encryption**: ChaCha20-Poly1305 AEAD encryption with a unique salt.
+5. **Persistence**: Objects are stored in a Content-Addressable structure (`/objects/xx/hash`).

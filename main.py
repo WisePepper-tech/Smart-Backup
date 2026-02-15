@@ -1,91 +1,186 @@
-from dotenv import load_dotenv
 import logging
-import os
-import time
+import getpass
+import json
 from pathlib import Path
-import argparse
-from runner import run_backup, DryRunResult
-from restore import run_restore
+from scanner import scan_files
+from manager import BackupManager
+from utils import show_progress
 
-load_dotenv()
-
-# Argument parsing (CLI)
-parser = argparse.ArgumentParser()
-parser.add_argument("--dry-run", action="store_true")
-args = parser.parse_args()
-
-# logging setup
-LOGLEVEL = os.getenv("LOGLEVEL", "INFO").upper()
-logging.basicConfig(
-    level=LOGLEVEL,
-    format="%(levelname)s:%(name)s:%(message)s",
-)
-logger = logging.getLogger("backup")
-
-start_time = time.perf_counter()
-
-# Paths: Create logs directory if it doesn't exist
-BASE_DIR = Path(__file__).resolve().parent
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
-LOG_FILE = LOG_DIR / "backup.log"
-
-dry_run = args.dry_run
-logger.warning(f"DEBUG: dry_run = {dry_run}")
-
-start_time = time.perf_counter()
-logger.info("Backup scan started")
-
-# User input path to folder, otherwise the program is not executed. That's mean restart program and repeat entering the folder path.
-while True:
-    folder_path = Path(input("Please enter the path of your folder: "))
-    if folder_path.is_dir():
-        break
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-def progress_callback(processed):
-    if processed % 10 == 0:
-        logger.info(f"Scanned: {processed}")
+def main():
+    print("=== Smart-Backup ===\n")
+    print("1. Create backup")
+    print("2. Restore version")
+    choice = input("\nChoose an action (1/2): ").strip()
 
+    # Общий ввод для обоих режимов
+    dst_input = input("Enter the path for copying: ").strip()
+    backup_base = Path(dst_input)
+    manager = BackupManager(backup_base)
 
-def progress_callback(event):
-    if event.percent % 10 == 0:
-        logger.info(f"Progress: {event.percent}% " f"({event.processed}/{event.total})")
+    if choice == "1":
+        src_input = input("Enter the path to the source folder: ").strip()
+        source_path = Path(src_input)
+        if not source_path.exists():
+            print("Error: The source folder was not found!")
+            return
 
+        project_name = (
+            input(f"Specify the name of the directory [{source_path.name}]: ").strip()
+            or source_path.name
+        )
 
-# Ask for backup destination
-backup_root = Path(input("Please enter BACKUP destination folder: "))
-backup_root.mkdir(parents=True, exist_ok=True)
-logger.info(f"Backup destination: {backup_root}")
+        last_versions = manager._find_target_versions(project_name)
+        old_salt = None
+        last_comp = True
 
-if dry_run:
-    logger.info("DRY-RUN enabled: filesystem will not be modified")
+        if last_versions:
+            with open(last_versions[-1] / "manifest.json", "r", encoding="utf-8") as f:
+                last_m = json.load(f)
 
+            last_enc = last_m["info"].get("encryption") is not None
 
-result = run_backup(
-    source=folder_path,
-    destination=backup_root,
-    dry_run=dry_run,
-    on_progress=progress_callback,
-    logger=logging.getLogger("backup"),
-)
+            old_salt = last_m["info"].get("salt")
+            last_comp = last_m["info"].get("compression_enabled", True)
+            last_enc = old_salt is not None
+            print(
+                f"\n[INFO] The previous version of the directory was found '{project_name}'."
+            )
+
+        comment = input("Comment on the version: ").strip()
+
+        compress_yn = (
+            input(
+                f"Do you want to compress the data? (y/n) [{'y' if last_comp else 'n'}]: "
+            ).lower()
+            != "n"
+        )
+
+        pass_input = getpass.getpass(
+            "Write the password (Enter — without password): "
+        ).strip()
+        password = pass_input if pass_input else None
+        current_enc = password is not None
+
+        if last_versions:
+            if last_comp != compress_yn or last_enc != current_enc:
+                print(
+                    f"\n[!] ATTENTION: The parameters are different from the previous version!"
+                )
+                print(f"Was: Compression={last_comp}, Encryption={last_enc}")
+                print(
+                    f"Has become: Compression={compress_yn}, Encryption={current_enc}"
+                )
+
+                if input("\nContinue with the new parameters? (y/n): ").lower() != "y":
+                    print("The operation was canceled by the user.")
+                    return
+
+            if last_enc and current_enc:
+                print(
+                    "[SUCCESS] The access parameters match. The files will use a common database."
+                )
+                if (
+                    input(
+                        "Generate a new security key (Salt)? Deduplication with older versions will be disabled. (y/n): "
+                    ).lower()
+                    == "y"
+                ):
+                    old_salt = None  # This will force the manager to create a new salt.
+                    print(
+                        "A new key will be used. Deduplication with older versions is disabled."
+                    )
+
+            elif not last_enc and current_enc:
+                print("\n[!!!] CRITICAL WARNING [!!!]")
+                print(
+                    "You enable encryption, but previous versions of this project are OPEN in the repository."
+                )
+                print(
+                    "An attacker will be able to read old copies of files without a password."
+                )
+                print(
+                    "\nRecommendation: Create a new folder for this backup or delete the old storage."
+                )
+                if (
+                    input(
+                        "Do you understand the risk and want to continue? (y/n): "
+                    ).lower()
+                    != "y"
+                ):
+                    return
+
+            elif last_enc and not current_enc:
+                print(
+                    "\n[!!!] WARNING: The new backup will be WITHOUT encryption, although it used to be."
+                )
+                if input("Are you sure? (y/n): ").lower() != "y":
+                    return
+
+        print("\n[1/2] Scanning and calculating hashes...")
+        scan_result = scan_files(source_path, progress_callback=show_progress)
+
+        print(f"\n[2/2] Creating a snapshot...")
+        res = manager.create_backup(
+            scan_result,
+            source_path,
+            project_name,
+            comment,
+            compress=compress_yn,
+            password=password,
+            forced_salt=old_salt,
+        )
+        print(f"\n Ready! New ones: {res.copied}, From the database: {res.skipped}")
+
+    elif choice == "2":
+        proj_query = (
+            input("Directory name (Enter to search everywhere): ").strip() or None
+        )
+        date_query = (
+            input("Part of the date/name of the version (Enter for latest): ").strip()
+            or None
+        )
+
+        found = manager._find_target_versions(proj_query, date_query)
+
+        if not found:
+            print("Versions not found.")
+            return
+
+        target_v = found[-1]
+        print(f"\nVersion selected: {target_v.parent.name} / {target_v.name}")
+
+        with open(target_v / "manifest.json", "r", encoding="utf-8") as f:
+            m_data = json.load(f)
+
+        password = None
+        if m_data["info"].get("salt"):
+            password = getpass.getpass(
+                "This backup is encrypted. Enter the password: "
+            ).strip()
+
+        target_path = Path(input("Where to restore it?: ").strip())
+
+        print("\nRecovery mode:")
+        print("1. Full (original files)")
+        print("2. Technical (as in storage: compression/cipher")
+        mode = input("Choose (1/2) [1]: ").strip() or "1"
+
+        full_clean = mode == "1"
+
+        manager.restore_version(
+            target_v.parent.name,
+            target_v.name,
+            target_path,
+            password=password,
+            decrypt_data=full_clean,
+            decompress_data=full_clean,
+        )
+
+        print(f"\nRecovery in {target_path} is complete!")
+
 
 if __name__ == "__main__":
-    restore_dir = Path("C:/COPY_restore")
-
-    run_restore(
-        destination=restore_dir,
-        prefix="",
-    )
-
-if isinstance(result, DryRunResult):
-    logger.info("DRY-RUN execution plan:")
-    logger.info(f"Planned copies: {result.planned_copies}")
-    logger.info(f"Planned versions: {result.planned_versions}")
-    logger.info(f"Planned skips: {result.planned_skips}")
-else:
-    logger.info(f"Copied: {result.copied}")
-    logger.info(f"Skipped: {result.skipped}")
-    logger.info(f"Versioned: {result.versions_created}")
-
-logger.info(f"Execution time: {time.perf_counter() - start_time:.2f}s")
+    main()
