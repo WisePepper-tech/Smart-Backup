@@ -1,7 +1,9 @@
 from pathlib import Path
-from models import ScanResult
+from classes import ScanResult, ProgressEvent
+from typing import Optional, Callable
+from hasher import get_file_hash
+import logging
 
-# Add ignored directories
 IGNORE_DIRS = {
     "__pycache__",
     ".git",
@@ -11,46 +13,58 @@ IGNORE_DIRS = {
     "Temp",
 }
 
+IGNORE_EXTENSIONS = {".tmp", ".log", ".bak", ".swp"}
 
-def scan_folder(folder_path: Path, on_progress = None):
+logger = logging.getLogger(__name__)
+
+
+def scan_files(
+    folder_path: Path,
+    progress_callback: Optional[Callable[[ProgressEvent], None]] = None,
+) -> ScanResult:
+
     files = []
     total_size = 0
-    processed = 0
+    file_data_map = {}
 
-    for path in folder_path.rglob("*"):
-        if not path.is_file():
-            continue
+    if not folder_path.exists() or not folder_path.is_dir():
+        logger.error(f"The directory {folder_path} is not found or not is dir.")
+        raise ValueError("Invalid directory path")
 
-        # Ignore unwanted directories
-        if any(ignored in path.parts for ignored in IGNORE_DIRS):
-            continue
+    for root, dirs, filenames in folder_path.walk():
+        dirs[:] = [dir for dir in dirs if dir not in IGNORE_DIRS]
+        for name in filenames:
+            path = root / name
 
-        try:
-            stat = path.stat()
-            total_size += stat.st_size
-            files.append(path)
-            processed += 1
+            if path.suffix.lower() in IGNORE_EXTENSIONS:
+                continue
 
-            if on_progress:
-                on_progress(processed)
+            try:
+                file_stat = path.stat()
+                file_hash = get_file_hash(path)
+                if file_hash:
+                    files.append(path)
+                    total_size += file_stat.st_size
+                    file_data_map[path] = file_hash
 
-        except (PermissionError, OSError):
-            # Scanner does NOT log — just skips
-            continue
+                if progress_callback:
+                    progress_callback(
+                        ProgressEvent(processed=len(files), current_file=path.name)
+                    )
 
-    return ScanResult(
-        files = files,
-        total_size = total_size,
-        processed = processed,
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Skip file {path}: {e}")
+                continue
+
+    result = ScanResult(
+        files=files,
+        total_files=len(files),
+        total_size=total_size,
+        file_hashes=file_data_map,
     )
 
-def count_files(folder_path: Path) -> int:
-    count = 0
-
-    for path in folder_path.rglob("*"):
-        if path.is_file():
-            if any(ignored in path.parts for ignored in IGNORE_DIRS):
-                continue
-            count += 1
-
-    return count
+    print()
+    logger.info(
+        f"Scanning files is completed, total files: {len(files)} / volume: {total_size / (1024**2):.2f} Mb"
+    )
+    return result
