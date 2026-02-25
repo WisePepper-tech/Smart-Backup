@@ -8,6 +8,8 @@ __pycache__/
 venv/
 .env/
 .venv/
+test_sandbox/
+cloud_temp/
 
 # Build artifacts
 build/

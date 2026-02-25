@@ -1,41 +1,57 @@
-## DISCLAIMER:
+🏗 Smart-Backup: Professional Data Snapshots
+Smart-Backup is a lightweight yet powerful backup utility built on the principles of data immutability and cryptographic security. It combines efficient deduplication with the reliability of bank-grade encryption.
 
-This tool is provided as-is. Always test backups before relying on them in production.
+🛡 Security Features
+AEAD Encryption: Uses the ChaCha20-Poly1305 algorithm — a modern standard providing both data confidentiality and authenticity.
 
-## 1. Project Description
+Traffic Analysis Protection: Automatic padding to 256-bit block alignment, masking the exact file sizes from potential side-channel analysis.
 
-Smart-Backup is a security-focused local backup utility with optional compression and AEAD encryption.
+Zero-Knowledge: Your passwords and keys never leave your local machine and are never stored in plaintext.
 
-## 2. Key Features
+🚀 Key Features
+Intelligent Deduplication: Utilizing Content-Addressable Storage (CAS), identical files across different projects are stored only once.
 
-- Versioned backup structure
+Cloud-Native: Full support for S3-compatible storage (MinIO, AWS, Google Cloud) out of the box.
 
-- JSON metadata tracking
+Integrity Guard: Every restoration is verified against its original SHA-256 hash.
 
-- Optional compression + padding
+Flexible Recovery: Supports "Technical" recovery mode (restoring encrypted/compressed blobs) for secure migration between servers.
 
-- Optional AEAD encryption (ChaCha20-Poly1305)
+🛠 Technical Workflow
+The data processing follows a strict pipeline:
 
-- Deterministic restore modes
+Scanning: scanner.py generates SHA-256 hashes for all source files.
 
-- Integrity verification (SHA-256)
+Compression: Zlib compression (automatically skipped for media and archives).
 
-## 3. Architecture Overview
+Obfuscation: Padding applied for block alignment and security.
 
-- Single storage directory
+Encryption: AEAD encryption using a unique salt.
 
-- Project-based versioning
+Persistence: Objects are stored in a structured /objects/xx/hash hierarchy.
 
-- Timestamped snapshots
+💻 Installation & Usage
+Bash
+# Clone the repository
+git clone https://github.com/WisePepper-tech/Smart-Backup
+cd smart-backup
 
-- Metadata-driven restore
+# Install dependencies
+pip install -r requirements.txt
 
-## 4. Security Model
+# Launch the Control Panel
+python main.py
 
-- No telemetry
+🧪 Quality Assurance
+The project includes an automated test suite verifying:
 
-- No remote communication
+Salt Isolation: Ensuring different salts produce unique objects.
 
-- Encryption keys never leave local machine
+Deduplication: Validating storage efficiency for identical files.
 
-- Restore possible in raw or decrypted mode
+Integrity: Full encryption/decryption cycle verification.
+
+Access Validation: Pre-flight password checks before file operations.
+
+⚖️ License & Disclaimer
+Provided "as-is" under the MIT License. Always verify your backups before relying on them for critical data.
