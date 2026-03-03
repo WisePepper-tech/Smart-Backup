@@ -149,8 +149,9 @@ jobs:
 
       - name: Semgrep Security Scan
         run: |
-          pip install semgrep==1.114.0
-          semgrep scan \
+          python -m venv /tmp/semgrep-venv
+          /tmp/semgrep-venv/bin/pip install semgrep==1.114.0 setuptools
+          /tmp/semgrep-venv/bin/semgrep scan \
             --config p/security-audit \
             --config p/secrets \
             --config p/owasp-top-ten \
