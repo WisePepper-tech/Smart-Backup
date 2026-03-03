@@ -1,0 +1,304 @@
+name: Secure CI
+
+on:
+  push:
+    branches: [main, features]
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -Eeuo pipefail {0}  # Strict bash
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Assert runner OS
+        run: |
+          if [ "${RUNNER_OS}" != "Linux" ]; then
+            echo "Unsupported OS: ${RUNNER_OS}"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0 
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip==25.3
+
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements.txt
+      
+      - name: Verify commit (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin ${{ github.event.pull_request.head.sha }}
+          git verify-commit ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify commit (push)
+        if: github.event_name == 'push'
+        run: |
+          git verify-commit ${{ github.sha }}
+
+      - name: Verify requirements hashes
+        run: |
+          pip install --require-hashes -r requirements.txt
+
+      - name: License Check
+        run: |
+          pip install pip-licenses==4.3.3
+          pip-licenses --format=json --output-file=licenses.json
+          pip-licenses --fail-on="GPL;AGPL"
+
+      - name: Install project
+        run: pip install --no-deps -e .
+
+      - name: Detect secrets (TruffleHog)
+        run: |
+          docker run --rm -v "$PWD:/pwd" \
+            trufflesecurity/trufflehog:041f07e9df901a1038a528e5525b0226d04dd5ea \
+            filesystem /pwd --json --fail
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@1938557f6a58837331b99822ab17b8e536e7bef9
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8c78abb9b62512e3c45dea6559ffd924ed8549c8
+        with:
+          languages: python
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@8c78abb9b62512e3c45dea6559ffd924ed8549c8
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  tests:  
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements.txt
+
+      - name: Run tests  # Fixed typo
+        env:
+          PYTHONHASHSEED: "0"
+        run: pytest -q --disable-warnings --maxfail=1
+
+  security: 
+    needs: [checks, tests]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Bandit Scan
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false 
+        uses: mdegis/bandit-action@851671cb116c1d3638de86975006bddf2619362a
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: "."
+          level: high
+          confidence: high
+
+      - name: Semgrep Security Scan
+        uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/python
+
+      - name: Install audit tools
+        run: pip install --require-hashes -r requirements-dev.txt
+
+      - name: Dependencies audit
+        run: pip-audit --strict -r requirements.txt
+
+      - name: Trivy FS scan
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
+        with:
+          scan-type: fs
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+  
+  dependency_guard:
+    needs: security
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Detect dependency change
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }} | grep -E 'requirements|pyproject'; then
+            echo "DEPENDENCY_CHANGED=true" >> $GITHUB_ENV
+          fi
+
+      - name: Warn dependency change
+        if: env.DEPENDENCY_CHANGED == 'true'
+        run: echo "::warning::Dependency change requires review"
+
+  build: # Containers
+    needs: [security, dependency_guard]
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.security.result == 'success' &&
+      (needs.dependency_guard.result == 'success' || needs.dependency_guard.result == 'skipped')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Setup Python for Vendoring
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        with:
+          cache: pip
+          python-version: 3.13
+
+      - name: Download dependencies (Vendoring)
+        run: |
+          mkdir wheels
+          pip download -r requirements.txt -d wheels --require-hashes
+
+      - name: Install conftest
+        env:
+          CONFTEST_VERSION: "0.66.0"
+        run: |
+          curl -L -o conftest.tar.gz \
+            "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          echo "7e717adada4ca64e600bdb86b789cbcc279215b3296e238bc291acbb81361d6f  conftest.tar.gz" | sha256sum -c
+          tar xzf conftest.tar.gz conftest
+          mv conftest /usr/local/bin/
+          rm conftest.tar.gz
+
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Check Dockerfile policy
+        run: |
+          conftest test Dockerfile --policy policy/
+
+      - name: Build image
+        if: github.event_name == 'push'
+        run: |
+          docker build \
+            --network=none \
+            --pull=true \
+            --no-cache \
+            --build-arg PIP_FIND_LINKS=/app/wheels \
+            -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            .
+
+      - name: Trivy Scan built image
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+
+      - name: Push image
+        if: github.event_name == 'push'
+        run: |
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+
+  attest_and_signing:  
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      - name: Get digest from registry
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}:${{ github.sha }} --format '{{json .Manifest.Digest}}' | tr -d '"')
+          if [ -z "$DIGEST" ]; then
+            echo "ERROR: Failed to get image digest"
+            exit 1
+          fi
+          echo "DIGEST=$DIGEST" >> $GITHUB_ENV
+
+      - name: Generate SBOM
+        run: |
+          pip install --require-hashes -r requirements-sbom.txt
+          cyclonedx-py requirements requirements.txt -o sbom.json
+
+      - name: Attach SBOM
+        run: |
+          cosign attach sbom \
+          --sbom sbom.json \
+          ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
+
+      - name: SLSA
+        if: github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+
+      - name: Sign image (keyless)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cosign sign \
+            --yes \
+            ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
+
+      - name: Cosign verify
+        run: |
+          cosign verify \
+          --certificate-identity-regexp="https://github.com/${{ github.repository }}/*" \
+          --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+          ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
