@@ -74,7 +74,7 @@ jobs:
         run: pip install --no-deps -e .
 
       - name: Detect secrets (TruffleHog)
-        uses: trufflesecurity/trufflehog@f6948f2ef3f84e8a86a11e10c21b1c8f69d32e1  # v3.93.3
+        uses: trufflesecurity/trufflehog@6961f2bace57ab32b23b3ba40f8f420f6bc7e004  # v3.93.3
         with:
           extra_args: --results=verified,unknown --fail
 
