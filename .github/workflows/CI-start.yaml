@@ -74,10 +74,9 @@ jobs:
         run: pip install --no-deps -e .
 
       - name: Detect secrets (TruffleHog)
-        run: |
-          docker run --rm -v "$PWD:/pwd" \
-            trufflesecurity/trufflehog:041f07e9df901a1038a528e5525b0226d04dd5ea \
-            filesystem /pwd --json --fail
+        uses: trufflesecurity/trufflehog@f6948f2ef3f84e8a86a11e10c21b1c8f69d32e1  # v3.93.3
+        with:
+          extra_args: --results=verified,unknown --fail
 
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@1938557f6a58837331b99822ab17b8e536e7bef9
