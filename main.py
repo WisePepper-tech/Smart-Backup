@@ -16,6 +16,34 @@ logging.getLogger("botocore").setLevel(logging.WARNING)
 logging.getLogger("boto3").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+IS_DOCKER = os.getenv("DOCKER_MODE") == "true"
+
+
+def get_safe_path(prompt):
+    # Gets the path from the user and checks it for security
+    user_input = input(prompt).strip()
+    if not user_input:
+        return None
+
+    if IS_DOCKER:
+        base = Path("/data").resolve()
+        # We remove the leading slashes and disks (type C:) so that Path does not consider the path to be absolute from the root
+        safe_input = user_input.lstrip("/").lstrip("\\")
+        # If the user entered the disk path (C:/...), we remove it as well
+        if ":" in safe_input:
+            safe_input = safe_input.split(":")[-1].lstrip("/").lstrip("\\")
+
+        target = (base / safe_input).resolve()
+
+        # Checking if the user is trying to leave /data (via ../..)
+        if not str(target).startswith(str(base)):
+            logging.warning(f"Attempt to escape sandbox: {user_input}")
+            return base
+        return target
+
+    # If the startup is local (Windows/Linux)
+    return Path(user_input).resolve()
+
 
 def main():
     while True:
@@ -53,17 +81,22 @@ def main():
             backup_base.mkdir(exist_ok=True)
         else:
             cloud = None
-            dst_input = input("Enter the path for storage: ").strip()
-            backup_base = Path(dst_input).resolve()
+            backup_base = get_safe_path("Enter path for storage [/data]: ") or Path(
+                "/data"
+            )
+            if not backup_base:
+                print("Error: Storage path is required!")
+                continue
 
         manager = BackupManager(backup_base)
 
         if choice == "1":
-            src_input = input("Enter the path to the source folder: ").strip()
-            source_path = Path(src_input)
-            if not source_path.exists():
-                print("Error: The source folder was not found!")
-                return
+            source_path = get_safe_path("Enter path to source [/data]: ") or Path(
+                "/data"
+            )
+            if not source_path or not source_path.exists():
+                print(f"Error: The source folder '{source_path}' was not found!")
+                continue
 
             project_name = (
                 input(
@@ -213,7 +246,7 @@ def main():
                     input("\nPress Enter to continue...")
                     continue
 
-            target_path = Path(input("Where to restore?: ").strip())
+            target_path = get_safe_path("Where to restore?: ")
 
             print("\nRecovery mode:")
             print("1. Full (original files)")

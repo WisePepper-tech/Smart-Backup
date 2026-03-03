@@ -1,0 +1,11 @@
+#
+# requirements-dev.txt — pinned dev dependencies
+# Usage: pip install --require-hashes -r requirements-dev.txt
+#
+
+pip-licenses==4.3.3 \
+    --hash=sha256:1b697cace3149d7d380307bb1f1e0505f0db98f25fada64d32b7e6240f37f72c
+prettytable==3.17.0 \
+    --hash=sha256:aad69b294ddbe3e1f95ef8886a060ed1666a0b83018bbf56295f6f226c43d287
+wcwidth==0.6.0 \
+    --hash=sha256:1a3a1e510b553315f8e146c54764f4fb6264ffad731b3d78088cdb1478ffbdad
