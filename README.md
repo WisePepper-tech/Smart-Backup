@@ -1,5 +1,5 @@
 # 🏗 Smart-Backup: Professional Data Snapshots
-Smart-Backup is a lightweight yet powerful backup utility built on the principles of data immutability and cryptographic security. It combines efficient deduplication with the reliability of bank-grade encryption.
+Smart-Backup is a lightweight yet powerful backup utility built on the principles of data immutability and cryptographic security. It combines efficient deduplication with the reliability.
 
 ### 🛡 Security Features
 AEAD Encryption: Uses the ChaCha20-Poly1305 algorithm — a modern standard providing both data confidentiality and authenticity.
@@ -68,7 +68,7 @@ This project implements a Hardened DevSecOps Pipeline:
 ### Command and Description
 make run,"Standard launch: Prepare, build, and run interactively."
 make build,Rebuild the Docker image (only if source files are modified).
-make ci-build,Unbiased build: Rebuild from scratch with no cache and forced pull.
+make local-build,Unbiased build: Rebuild from scratch with no cache and forced pull.
 make down,Stop all containers and MinIO infrastructure.
 make clean,"Full Reset: Remove images, MinIO volumes, and the wheels folder."
 make logs,View MinIO logs for connection troubleshooting.
@@ -111,7 +111,7 @@ DOCKER_MODE=true
 # Install dependencies
 pip install -r requirements.txt
 
-### ⚙️ Configuration 
+### Tests 
 The project includes an automated test suite verifying:
 
 Salt Isolation: Ensuring different salts produce unique objects.
