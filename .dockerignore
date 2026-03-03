@@ -1,0 +1,13 @@
+.git/
+.github/
+wheels/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docs/
+*.md
+.env
+.env.*
+!example.env
+Makefile
