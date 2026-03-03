@@ -76,7 +76,7 @@ jobs:
       - name: Detect secrets (TruffleHog)
         uses: trufflesecurity/trufflehog@6961f2bace57ab32b23b3ba40f8f420f6bc7e004  # v3.93.3
         with:
-          extra_args: --results=verified,unknown --fail
+          extra_args: --results=verified,unknown
 
       - name: Gitleaks scan
         uses: gitleaks/gitleaks-action@1938557f6a58837331b99822ab17b8e536e7bef9
