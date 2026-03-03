@@ -47,13 +47,17 @@ jobs:
       
       - name: Verify commit (PR)
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch --no-tags origin ${{ github.event.pull_request.head.sha }}
+          KEY_URL="https://github.com/${{ github.event.pull_request.head.repo.owner.login }}.gpg"
+          curl -sL "$KEY_URL" | gpg --import
           git verify-commit ${{ github.event.pull_request.head.sha }}
 
       - name: Verify commit (push)
         if: github.event_name == 'push'
         run: |
+          curl -sL "https://github.com/${{ github.repository_owner }}.gpg" | gpg --import
           git verify-commit ${{ github.sha }}
 
       - name: Verify requirements hashes
