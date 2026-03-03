@@ -156,12 +156,14 @@ jobs:
             semgrep scan --config auto --error /src
 
       - name: Trivy FS scan
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4  # v0.32.0
-        with:
-          scan-type: fs
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          ignore-unfixed: true
+        run: |
+          wget -q https://github.com/aquasecurity/trivy/releases/download/v0.64.1/trivy_0.64.1_Linux-64bit.tar.gz
+          tar -xzf trivy_0.64.1_Linux-64bit.tar.gz trivy
+          ./trivy fs \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            .
   
   dependency_guard:
     needs: security
@@ -245,12 +247,14 @@ jobs:
             .
 
       - name: Trivy Scan built image
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4  # v0.32.0
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          ignore-unfixed: true
+        run: |
+          wget -q https://github.com/aquasecurity/trivy/releases/download/v0.64.1/trivy_0.64.1_Linux-64bit.tar.gz
+          tar -xzf trivy_0.64.1_Linux-64bit.tar.gz trivy
+          ./trivy image \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
 
       - name: Push image
         if: github.event_name == 'push'
