@@ -87,7 +87,7 @@ jobs:
         with:
           languages: python
 
-      - name: Perform CodeQL Analysis
+      - name: Perform CodeQL Analysis  # Without Automatic Analysis 
         uses: github/codeql-action/analyze@8c78abb9b62512e3c45dea6559ffd924ed8549c8
 
       - name: SonarQube Scan
