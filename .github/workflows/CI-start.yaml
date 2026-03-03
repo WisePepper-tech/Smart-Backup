@@ -149,14 +149,11 @@ jobs:
 
       - name: Semgrep Security Scan
         run: |
-          python -m venv /tmp/semgrep-venv
-          /tmp/semgrep-venv/bin/pip install semgrep==1.114.0 setuptools
-          /tmp/semgrep-venv/bin/semgrep scan \
-            --config p/security-audit \
-            --config p/secrets \
-            --config p/owasp-top-ten \
-            --config p/python \
-            --error .
+          docker run --rm \
+            -v "$PWD:/src" \
+            -e SEMGREP_RULES="p/security-audit p/secrets p/owasp-top-ten p/python" \
+            returntocorp/semgrep \
+            semgrep scan --config auto --error /src
 
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37  # v0.31.0
