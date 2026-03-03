@@ -67,7 +67,7 @@ jobs:
 
       - name: License Check
         run: |
-          pip install pip-licenses==4.3.3
+          pip install --require-hashes -r requirements-dev.txt
           pip-licenses --format=json --output-file=licenses.json
           pip-licenses --fail-on="GPL;AGPL"
 

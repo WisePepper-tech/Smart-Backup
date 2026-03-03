@@ -36,10 +36,11 @@ pluggy==1.6.0 \
 pygments==2.19.2 \
     --hash=sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b
 
-# coverage: платформо-зависимый пакет — хэши для Windows cp314 и Linux cp313
+# coverage: платформо-зависимый пакет — хэши для Windows cp314, Linux cp313, Linux cp312
 coverage==7.13.4 \
     --hash=sha256:245e37f664d89861cf2329c9afa2c1fe9e6d4e1a09d872c947e70718aeeac505 \
-    --hash=sha256:b720ce6a88a2755f7c697c23268ddc47a571b88052e6b155224347389fdf6a3b
+    --hash=sha256:b720ce6a88a2755f7c697c23268ddc47a571b88052e6b155224347389fdf6a3b \
+    --hash=sha256:2c048ea43875fbf8b45d476ad79f179809c590ec7b79e2035c662e7afa3192e3
 
 # --- bandit and transitive dependencies ---
 bandit==1.8.3 \
