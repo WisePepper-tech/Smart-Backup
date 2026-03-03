@@ -132,13 +132,8 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
 
       - name: Bandit Scan
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false 
-        uses: mdegis/bandit-action@851671cb116c1d3638de86975006bddf2619362a
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          path: "."
-          level: high
-          confidence: high
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
+        run: bandit -r . -ll -ii --exclude ./tests
 
       - name: Semgrep Security Scan
         uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d

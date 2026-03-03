@@ -36,7 +36,28 @@ pluggy==1.6.0 \
 pygments==2.19.2 \
     --hash=sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b
 
-# coverage: платформо-зависимый пакет — указаны хэши для Windows и Linux x86_64
+# coverage: платформо-зависимый пакет — хэши для Windows cp314 и Linux cp313
 coverage==7.13.4 \
     --hash=sha256:245e37f664d89861cf2329c9afa2c1fe9e6d4e1a09d872c947e70718aeeac505 \
     --hash=sha256:b720ce6a88a2755f7c697c23268ddc47a571b88052e6b155224347389fdf6a3b
+
+# --- bandit and transitive dependencies ---
+bandit==1.8.3 \
+    --hash=sha256:28f04dc0d258e1dd0f99dee8eefa13d1cb5e3fde1a5ab0c523971f97b289bcd8
+
+markdown-it-py==4.0.0 \
+    --hash=sha256:87327c59b172c5011896038353a81343b6754500a08cd7a4973bb48c6d578147
+
+mdurl==0.1.2 \
+    --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
+
+rich==14.3.3 \
+    --hash=sha256:793431c1f8619afa7d3b52b2cdec859562b950ea0d4b6b505397612db8d5362d
+
+stevedore==5.7.0 \
+    --hash=sha256:fd25efbb32f1abb4c9e502f385f0018632baac11f9ee5d1b70f88cc5e22ad4ed
+
+# pyyaml: platform-dependent — hashes for Windows cp314 and Linux cp313
+pyyaml==6.0.3 \
+    --hash=sha256:4a2e8cebe2ff6ab7d1050ecd59c25d4c8bd7e6f400f5f82b96557ac0abafd0ac \
+    --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6
