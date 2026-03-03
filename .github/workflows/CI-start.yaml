@@ -148,13 +148,14 @@ jobs:
         run: pip-audit --strict -r requirements.txt
 
       - name: Semgrep Security Scan
-        uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
-        with:
-          config: >-
-            p/security-audit
-            p/secrets
-            p/owasp-top-ten
-            p/python
+        run: |
+          pip install semgrep
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/owasp-top-ten \
+            --config p/python \
+            --error .
 
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
