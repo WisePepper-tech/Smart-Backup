@@ -131,9 +131,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
 
+      - name: Install audit tools
+        run: pip install --require-hashes -r requirements-dev.txt
+
       - name: Bandit Scan
         if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
         run: bandit -r . -ll -ii --exclude ./tests
+
+      - name: Dependencies audit
+        run: pip-audit --strict -r requirements.txt
 
       - name: Semgrep Security Scan
         uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
@@ -143,12 +149,6 @@ jobs:
             p/secrets
             p/owasp-top-ten
             p/python
-
-      - name: Install audit tools
-        run: pip install --require-hashes -r requirements-dev.txt
-
-      - name: Dependencies audit
-        run: pip-audit --strict -r requirements.txt
 
       - name: Trivy FS scan
         uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808
