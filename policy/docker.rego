@@ -1,5 +1,7 @@
 package main
 
+import rego.v1
+
 deny[msg] {
   input[i].Cmd == "run"
   contains(lower(input[i].Value[0]), "curl")

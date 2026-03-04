@@ -165,18 +165,15 @@ jobs:
 
       - name: Trivy FS scan
         run: |
-          set +e
-          wget -q https://github.com/aquasecurity/trivy/releases/download/v0.64.1/trivy_0.64.1_Linux-64bit.tar.gz
-          echo "wget exit: $?"
-          echo "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5  trivy_0.64.1_Linux-64bit.tar.gz" | sha256sum -c
-          echo "sha256 exit: $?"
-          tar -xzf trivy_0.64.1_Linux-64bit.tar.gz trivy
-          echo "tar exit: $?"
-          ./trivy --version
-          echo "version exit: $?"
-          ./trivy fs --severity CRITICAL,HIGH --ignore-unfixed --debug . > trivy-debug.log 2>&1
-          echo "scan exit: $?"
-          cat trivy-debug.log
+          curl -fsSL -o trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.64.1/trivy_0.64.1_Linux-64bit.tar.gz
+          echo "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5  trivy.tar.gz" | sha256sum -c
+          tar -xzf trivy.tar.gz trivy
+          ./trivy fs \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            .
   
   dependency_guard:
     needs: security
