@@ -1,0 +1,15 @@
+# .gitleaks.toml
+title = "Smart-Backup Gitleaks Config"
+
+[allowlist]
+description = "Paths and patterns to ignore"
+paths = [
+  "tests/",
+  "wheels/",
+  "policy/",
+  "docker-compose.yml"
+]
+regexes = [
+  "MINIO_ROOT_(USER|PASSWORD)=.*",
+  '''(?i)(test|mock|fake|example|dummy).{0,20}(key|secret|token|password)'''
+]
