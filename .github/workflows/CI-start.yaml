@@ -244,15 +244,16 @@ jobs:
       - name: Check Dockerfile policy
         run: conftest test Dockerfile --policy policy/
 
-      - name: Build image
+      - name: Build Image
         if: github.event_name == 'push'
         run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           docker build \
             --network=none \
             --pull=true \
             --no-cache \
             --build-arg PIP_FIND_LINKS=/app/wheels \
-            -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            -t ghcr.io/${REPO}:${{ github.sha }} \
             .
 
       - name: Trivy Image Scan
@@ -271,7 +272,8 @@ jobs:
       - name: Push image
         if: github.event_name == 'push'
         run: |
-          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker push ghcr.io/${REPO}:${{ github.sha }}
 
   attest_and_signing:  
     needs: build
@@ -297,12 +299,15 @@ jobs:
 
       - name: Get digest from registry
         run: |
-          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}:${{ github.sha }} --format '{{json .Manifest.Digest}}' | tr -d '"')
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${REPO}:${{ github.sha }} \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
           if [ -z "$DIGEST" ]; then
             echo "ERROR: Failed to get image digest"
             exit 1
           fi
           echo "DIGEST=$DIGEST" >> $GITHUB_ENV
+          echo "REPO=${REPO}" >> $GITHUB_ENV
 
       - name: Generate SBOM
         run: |
@@ -313,7 +318,7 @@ jobs:
         run: |
           cosign attach sbom \
           --sbom sbom.json \
-          ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
+          ghcr.io/${{ env.REPO }}@${{ env.DIGEST }}
 
       - name: SLSA
         if: github.ref == 'refs/heads/main'
@@ -328,11 +333,11 @@ jobs:
         run: |
           cosign sign \
             --yes \
-            ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
+            ghcr.io/${{ env.REPO }}@${{ env.DIGEST }}
 
       - name: Cosign verify
         run: |
           cosign verify \
           --certificate-identity-regexp="https://github.com/${{ github.repository }}/*" \
           --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-          ghcr.io/${{ github.repository }}@${{ env.DIGEST }}
+          ghcr.io/${{ env.REPO }}@${{ env.DIGEST }}
