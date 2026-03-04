@@ -172,7 +172,8 @@ jobs:
             --severity CRITICAL,HIGH \
             --ignore-unfixed \
             --debug \
-            . 2>&1 | head -200
+            . > trivy-debug.log 2>&1 || true
+          cat trivy-debug.log
   
   dependency_guard:
     needs: security
