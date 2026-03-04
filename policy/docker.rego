@@ -2,14 +2,14 @@ package main
 
 import rego.v1
 
-deny[msg] {
+deny contains msg if {
   input[i].Cmd == "run"
   contains(lower(input[i].Value[0]), "curl")
-  msg = "Curl is not allowed in Dockerfile"
+  msg := "Curl is not allowed in Dockerfile"
 }
 
-deny[msg] {
+deny contains msg if {
   input[i].Cmd == "run"
   contains(lower(input[i].Value[0]), "wget")
-  msg = "Wget is not allowed in Dockerfile"
+  msg := "Wget is not allowed in Dockerfile"
 }

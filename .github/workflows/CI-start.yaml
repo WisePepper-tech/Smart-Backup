@@ -257,12 +257,11 @@ jobs:
 
       - name: Trivy Image Scan
         if: github.event_name == 'push'
-        shell: bash
         run: |
-          curl -fsSL -o trivy.tar.gz \ 
+          curl -fsSL -o trivy.tar.gz \
             https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz
-          echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  trivy_0.64.1_Linux-64bit.tar.gz" | sha256sum -c
-          tar -xzf trivy_0.64.1_Linux-64bit.tar.gz trivy
+          echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  trivy.tar.gz" | sha256sum -c
+          tar -xzf trivy.tar.gz trivy
           ./trivy image \
             --severity CRITICAL,HIGH \
             --exit-code 1 \
