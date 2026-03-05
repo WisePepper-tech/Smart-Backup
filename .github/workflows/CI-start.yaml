@@ -263,11 +263,12 @@ jobs:
             https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz
           echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  trivy.tar.gz" | sha256sum -c
           tar -xzf trivy.tar.gz trivy
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           ./trivy image \
             --severity CRITICAL,HIGH \
             --exit-code 1 \
             --ignore-unfixed \
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${REPO}:${{ github.sha }}
 
       - name: Push image
         if: github.event_name == 'push'
@@ -324,7 +325,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
         with:
-          subject-name: ghcr.io/${{ github.repository }}
+          subject-name: ghcr.io/${{ env.REPO }}
           subject-digest: ${{ env.DIGEST }}
           push-to-registry: true
 
