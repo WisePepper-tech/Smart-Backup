@@ -278,7 +278,10 @@ jobs:
 
   attest_and_signing:  
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
