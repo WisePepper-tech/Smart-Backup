@@ -292,6 +292,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
 
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
         with:
@@ -318,11 +321,13 @@ jobs:
           pip install --require-hashes -r requirements-sbom.txt
           cyclonedx-py requirements requirements.txt -o sbom.json
 
-      - name: Attach SBOM
+      - name: Attest SBOM
         run: |
-          cosign attach sbom \
-          --sbom sbom.json \
-          ghcr.io/${{ env.REPO }}@${{ env.DIGEST }}
+          cosign attest \
+            --yes \
+            --predicate sbom.json \
+            --type cyclonedx \
+            ghcr.io/${{ env.REPO }}@${{ env.DIGEST }}
 
       - name: SLSA
         if: github.ref == 'refs/heads/main'
