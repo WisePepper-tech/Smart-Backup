@@ -54,7 +54,6 @@ jobs:
         if: |
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.fork == false
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -160,7 +159,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/src" \
             -e SEMGREP_RULES="p/security-audit p/secrets p/owasp-top-ten p/python" \
-            returntocorp/semgrep \
+            semgrep/semgrep@sha256:769691ce8da259c570a1d5ecd00e8cbc7c97d98ef1837b26b09726cb57af2890 \
             semgrep scan --config auto --error /src
 
       - name: Trivy FS scan
@@ -179,6 +178,9 @@ jobs:
     needs: security
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
@@ -254,7 +256,10 @@ jobs:
             --no-cache \
             --build-arg PIP_FIND_LINKS=/app/wheels \
             -t ghcr.io/${REPO}:${{ github.sha }} \
+            --metadata-file build-metadata.json \
             .
+          BUILD_DIGEST=$(jq -r '."containerimage.digest"' build-metadata.json)
+          echo "BUILD_DIGEST=${BUILD_DIGEST}" >> $GITHUB_ENV
 
       - name: Trivy Image Scan
         if: github.event_name == 'push'
@@ -278,6 +283,7 @@ jobs:
 
   attest_and_signing:  
     needs: build
+    environment: production
     if: |
       always() &&
       github.ref == 'refs/heads/main' &&
@@ -316,6 +322,16 @@ jobs:
           fi
           echo "DIGEST=$DIGEST" >> $GITHUB_ENV
           echo "REPO=${REPO}" >> $GITHUB_ENV
+
+      - name: Verify image integrity  # ← новый шаг
+        run: |
+          if [ "${{ env.DIGEST }}" != "${{ env.BUILD_DIGEST }}" ]; then
+            echo "ERROR: Image digest mismatch!"
+            echo "Built:    ${{ env.BUILD_DIGEST }}"
+            echo "Registry: ${{ env.DIGEST }}"
+            exit 1
+          fi
+          echo "Digest verified: ${{ env.DIGEST }}"
 
       - name: Generate SBOM
         run: |
