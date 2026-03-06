@@ -213,6 +213,8 @@ jobs:
       contents: read
       pull-requests: read
       packages: write
+    outputs:
+      build_digest: ${{ steps.build_image.outputs.build_digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
@@ -247,6 +249,7 @@ jobs:
         run: conftest test Dockerfile --policy policy/
 
       - name: Build Image
+        id: build_image 
         if: github.event_name == 'push'
         run: |
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -259,7 +262,7 @@ jobs:
             --metadata-file build-metadata.json \
             .
           BUILD_DIGEST=$(jq -r '."containerimage.digest"' build-metadata.json)
-          echo "BUILD_DIGEST=${BUILD_DIGEST}" >> $GITHUB_ENV
+          echo "build_digest=${BUILD_DIGEST}" >> $GITHUB_OUTPUT
 
       - name: Trivy Image Scan
         if: github.event_name == 'push'
@@ -323,11 +326,12 @@ jobs:
           echo "DIGEST=$DIGEST" >> $GITHUB_ENV
           echo "REPO=${REPO}" >> $GITHUB_ENV
 
-      - name: Verify image integrity  # ← новый шаг
+      - name: Verify image integrity
         run: |
-          if [ "${{ env.DIGEST }}" != "${{ env.BUILD_DIGEST }}" ]; then
+          BUILD_DIGEST="${{ needs.build.outputs.build_digest }}"
+          if [ "${BUILD_DIGEST}" != "${{ env.DIGEST }}" ]; then
             echo "ERROR: Image digest mismatch!"
-            echo "Built:    ${{ env.BUILD_DIGEST }}"
+            echo "Built:    ${BUILD_DIGEST}"
             echo "Registry: ${{ env.DIGEST }}"
             exit 1
           fi
