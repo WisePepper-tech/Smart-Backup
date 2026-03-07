@@ -32,12 +32,12 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0 
         with:
           python-version: "3.13"
           cache: pip
@@ -76,27 +76,27 @@ jobs:
         run: pip install --no-deps -e .
 
       - name: Detect secrets (TruffleHog)
-        uses: trufflesecurity/trufflehog@6961f2bace57ab32b23b3ba40f8f420f6bc7e004  # v3.93.3
+        uses: trufflesecurity/trufflehog@c3e599b7163e8198a55467f3133db0e7b2a492cb  # v3.93.7
         with:
           extra_args: --results=verified,unknown
 
       - name: Gitleaks scan
-        uses: gitleaks/gitleaks-action@1938557f6a58837331b99822ab17b8e536e7bef9
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9  
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           config-path: .gitleaks.toml
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8c78abb9b62512e3c45dea6559ffd924ed8549c8
+        uses: github/codeql-action/init@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
         with:
           languages: python
 
       - name: Perform CodeQL Analysis  # Without Automatic Analysis 
-        uses: github/codeql-action/analyze@8c78abb9b62512e3c45dea6559ffd924ed8549c8
+        uses: github/codeql-action/analyze@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
 
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9  # v7.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
@@ -108,10 +108,10 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.13"
           cache: pip
@@ -134,10 +134,10 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.13"
           cache: pip
@@ -145,24 +145,23 @@ jobs:
       - name: Install audit tools
         run: pip install --require-hashes -r requirements-dev.txt
 
-      - name: Bandit Scan
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
-        run: bandit -r . -ll -ii --exclude ./tests
-
-      - name: Dependencies audit
+      - name: Dependencies audit  # v2.10.0
         run: |
           pip-audit --strict -r requirements-dev.txt
           pip-audit --strict -r requirements.txt
 
-      - name: Semgrep Security Scan
+      - name: Bandit Scan  # v.1.9.4 
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
+        run: bandit -r . -ll -ii --exclude ./tests
+
+      - name: Semgrep Security Scan  # semgrep/semgrep:1.154.0-nonroot (INDEX DIGEST)
         run: |
           docker run --rm \
             -v "$PWD:/src" \
-            -e SEMGREP_RULES="p/security-audit p/secrets p/owasp-top-ten p/python" \
-            semgrep/semgrep@sha256:769691ce8da259c570a1d5ecd00e8cbc7c97d98ef1837b26b09726cb57af2890 \
+            semgrep/semgrep@sha256:17668d9bce732a3ba6766131a3275e9493366972dff9eefc01713b6bd811a4fa \
             semgrep scan --config auto --error /src
 
-      - name: Trivy FS scan
+      - name: Trivy FS scan  # v0.69.3
         run: |
           curl -fsSL -o trivy.tar.gz \
             https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz
@@ -183,10 +182,10 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.13"
           cache: pip
@@ -217,10 +216,10 @@ jobs:
       pushed_digest: ${{ steps.push_image.outputs.pushed_digest }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Setup Python for Vendoring
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           cache: pip
           python-version: 3.13
@@ -264,7 +263,7 @@ jobs:
           BUILD_DIGEST=$(jq -r '."containerimage.digest"' build-metadata.json)
           echo "build_digest=${BUILD_DIGEST}" >> $GITHUB_OUTPUT
 
-      - name: Trivy Image Scan
+      - name: Trivy Image Scan  # v0.69.3
         if: github.event_name == 'push'
         run: |
           curl -fsSL -o trivy.tar.gz \
@@ -306,19 +305,21 @@ jobs:
       attestations: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: 'v3.0.5'
 
       - name: Get digest from registry
         run: |
@@ -344,7 +345,7 @@ jobs:
           fi
           echo "Digest verified: ${REGISTRY}"
 
-      - name: Generate SBOM
+      - name: Generate SBOM  # v4.4.0
         run: |
           pip install --require-hashes -r requirements-sbom.txt
           cyclonedx-py requirements requirements.txt -o sbom.json
@@ -359,7 +360,7 @@ jobs:
 
       - name: SLSA
         if: github.ref == 'refs/heads/main'
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ env.REPO }}
           subject-digest: ${{ env.DIGEST }}
