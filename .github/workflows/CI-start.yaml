@@ -214,7 +214,7 @@ jobs:
       pull-requests: read
       packages: write
     outputs:
-      build_digest: ${{ steps.build_image.outputs.build_digest }}
+      pushed_digest: ${{ steps.push_image.outputs.pushed_digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v.4.3.1
@@ -279,10 +279,16 @@ jobs:
             ghcr.io/${REPO}:${{ github.sha }}
 
       - name: Push image
+        id: push_image
         if: github.event_name == 'push'
         run: |
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           docker push ghcr.io/${REPO}:${{ github.sha }}
+          # Получаем digest из registry сразу после push
+          PUSHED_DIGEST=$(docker buildx imagetools inspect \
+            ghcr.io/${REPO}:${{ github.sha }} \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "pushed_digest=${PUSHED_DIGEST}" >> $GITHUB_OUTPUT
 
   attest_and_signing:  
     needs: build
@@ -328,14 +334,15 @@ jobs:
 
       - name: Verify image integrity
         run: |
-          BUILD_DIGEST="${{ needs.build.outputs.build_digest }}"
-          if [ "${BUILD_DIGEST}" != "${{ env.DIGEST }}" ]; then
+          PUSHED="${{ needs.build.outputs.pushed_digest }}"
+          REGISTRY="${{ env.DIGEST }}"
+          if [ "${PUSHED}" != "${REGISTRY}" ]; then
             echo "ERROR: Image digest mismatch!"
-            echo "Built:    ${BUILD_DIGEST}"
-            echo "Registry: ${{ env.DIGEST }}"
+            echo "Pushed:   ${PUSHED}"
+            echo "Registry: ${REGISTRY}"
             exit 1
           fi
-          echo "Digest verified: ${{ env.DIGEST }}"
+          echo "Digest verified: ${REGISTRY}"
 
       - name: Generate SBOM
         run: |
