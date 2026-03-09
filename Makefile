@@ -1,5 +1,6 @@
 # Variables
 IMAGE_NAME = smart-backup:v1.0.0
+NETWORK = smart-backup_default
 
 # A variable for tracking files
 SOURCES = main.py manager.py cloud_manager.py scanner.py utils.py
@@ -34,20 +35,13 @@ run: build
 	else \
 		winpath=$(WINPATH); \
 	fi; \
-	docker-compose up -d minio; \
+	WINPATH="$$winpath" docker-compose up minio -d; \
 	echo "Waiting for MinIO to start..."; \
 	until docker-compose exec minio curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; do \
 		echo -n "."; sleep 1; \
 	done; \
 	echo " MinIO is ready!"; \
-	docker run --rm -it \
-		--network=$$(docker network ls -qf "name=$(shell basename $(CURDIR))_default") \
-		-v "$$winpath:/data" \
-		-v "$(PWD):/app" \
-		-w /app \
-		--env-file .env \
-		-e DOCKER_MODE=true \
-		$(IMAGE_NAME)
+	docker-compose run --rm -v "$$winpath:/data" smart-backup
 
 # Stopping Everything
 down:
