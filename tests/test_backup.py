@@ -581,9 +581,45 @@ class TestMain(unittest.TestCase):
 
         with patch("main.load_dotenv"):
             with patch("main.CloudManager"):
-                with patch("main.os.getenv", return_value="val"):
-                    result = main._setup_storage(is_cloud=True)
+                with patch("main.Path.mkdir"):
+                    with patch(
+                        "main.os.getenv",
+                        side_effect=lambda k, *d: (
+                            "true"
+                            if k == "DOCKER_MODE"
+                            else (
+                                "http://minio:9000"
+                                if k == "S3_ENDPOINT"
+                                else (d[0] if d else "val")
+                            )
+                        ),
+                    ):
+                        result = main._setup_storage(is_cloud=True)
         self.assertIsNotNone(result)
+
+    def test_setup_storage_minio_replaced_without_docker_mode(self):
+        import main
+
+        with patch("main.load_dotenv"):
+            with patch("main.Path.mkdir"):
+                with patch(
+                    "main.os.getenv",
+                    side_effect=lambda k, *d: (
+                        None
+                        if k == "DOCKER_MODE"
+                        else (
+                            "http://minio:9000"
+                            if k == "S3_ENDPOINT"
+                            else (d[0] if d else "val")
+                        )
+                    ),
+                ):
+                    with patch("main.CloudManager") as mock_cm:
+                        main._setup_storage(is_cloud=True)
+        call_kwargs = mock_cm.call_args
+        endpoint_used = call_kwargs.kwargs.get("endpoint") or call_kwargs.args[0]
+        self.assertIn("localhost", endpoint_used)
+        self.assertNotIn("minio", endpoint_used)
 
     def test_setup_storage_path_fallback(self):
         """get_safe_path returns None → fallback to DOCKER_DATA_PATH."""
