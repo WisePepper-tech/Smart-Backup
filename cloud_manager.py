@@ -2,6 +2,7 @@ import json
 import logging
 import boto3
 import os
+import sys
 from botocore.exceptions import ClientError
 from pathlib import Path
 from io import BytesIO
@@ -26,7 +27,7 @@ class CloudManager:
         except ClientError:
             try:
                 self.s3.create_bucket(Bucket=self.bucket)
-            except Exception as e:
+            except (ClientError, OSError) as e:
                 print(f"[!] Connection error to MinIO: {e}")
 
     def get_last_manifest(self, project_name):
@@ -39,7 +40,8 @@ class CloudManager:
         try:
             data = self.download_data(last_key)
             return json.loads(data), last_key
-        except:
+        except (ClientError, json.JSONDecodeError) as e:
+            logger.warning(f"Failed to load manifest {last_key}: {e}")
             return None
 
     def upload_data(self, rel_path: str, data: bytes):
@@ -74,7 +76,6 @@ class CloudManager:
         filled = int(scale_width * transmitted / total)
         bar = "#" * filled + "-" * (scale_width - filled)
         msg = f"\r   Cloud |{bar}| {percent:.1f}% ({transmitted}/{total} bytes)"
-        import sys
 
         sys.stdout.write(msg)
         sys.stdout.flush()
@@ -91,13 +92,11 @@ class CloudManager:
 
     def list_manifests(self, project_name=None):
         if project_name:
-            # Clearing the project name from possible Windows slashes for S3
             clean_name = str(project_name).replace("\\", "/")
             prefix = f"backups/{clean_name}/"
         else:
             prefix = "backups/"
 
-        prefix = f"backups/{project_name}/" if project_name else "backups/"
         paginator = self.s3.get_paginator("list_objects_v2")
         manifests = []
         for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):

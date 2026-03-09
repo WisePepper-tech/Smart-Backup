@@ -11,6 +11,8 @@ from utils import show_progress
 from hasher import get_file_hash
 from typing import Callable, Optional
 
+MANIFEST_FILE = "manifest.json"
+
 logger = logging.getLogger(__name__)
 
 NON_COMPRESSIBLE = {
@@ -95,7 +97,6 @@ class BackupManager:
                 compressed=compress,
                 salt=current_salt,
             )
-            already_exists = obj_path.exists()
 
             if not obj_path.exists():
                 try:
@@ -159,7 +160,7 @@ class BackupManager:
             "files": manifest_files,
         }
 
-        manifest_path = snapshot_dir / "manifest.json"
+        manifest_path = snapshot_dir / MANIFEST_FILE
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=4, ensure_ascii=False)
 
@@ -193,7 +194,7 @@ class BackupManager:
         safe_restore_path = target_path / f"{project_name}_{version_name}"
         safe_restore_path.mkdir(parents=True, exist_ok=True)
 
-        manifest_path = self.backup_base / project_name / version_name / "manifest.json"
+        manifest_path = self.backup_base / project_name / version_name / MANIFEST_FILE
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
@@ -210,16 +211,20 @@ class BackupManager:
         results = {}
         print(f"\n[RESTORE] Restoring {total_files} files to: {safe_restore_path}")
 
+        global_compression = manifest["info"].get("compression_enabled", False)
+
         for i, (rel_path_str, info) in enumerate(manifest["files"].items(), 1):
             file_hash = info["hash"]
-            is_compressed = info.get("compressed", False)
             is_encrypted = bool(salt_hex)
             obj_path = self._get_object_path(
                 file_hash,
                 encrypted=is_encrypted,
-                compressed=is_compressed,
+                compressed=global_compression,
                 salt=salt_hex or "",
             )
+
+            file_specific_compression = info.get("compressed", False)
+
             dest_path = safe_restore_path / rel_path_str
             results[rel_path_str] = False
 
@@ -228,30 +233,31 @@ class BackupManager:
 
                 # Read data from "objects"
                 if fetch_proxy:
-                    # rel_obj_path = objects/xx/hash
                     data = fetch_proxy(obj_path.relative_to(self.backup_base))
                 else:
                     with open(obj_path, "rb") as f_in:
                         data = f_in.read()
 
+                # Decryption
                 if decrypt_data and crypter:
                     try:
                         data = crypter.decrypt(data)
                     except Exception:
                         raise PermissionError(f"Invalid password for {rel_path_str}")
 
+                # Removing padding: Padding was added if the file was compressed OR if cryptography was enabled
                 if (decrypt_data or not salt_hex) and decompress_data:
-                    if info.get("compressed") or salt_hex:
+                    if file_specific_compression or salt_hex:
                         try:
                             data = self._remove_padding(data)
-                        except:
+                        except Exception:
                             pass
 
                 # AUTO—DECOMPRESSION: if there is a compression flag in the manifest, decompress
-                if decompress_data and info.get("compressed"):
+                if decompress_data and file_specific_compression:
                     try:
                         data = zlib.decompress(data)
-                    except:
+                    except Exception:
                         logger.error(f"Decompression error {rel_path_str}")
 
                 # Write clean data
@@ -294,11 +300,18 @@ class BackupManager:
 
         return results
 
+    def _version_matches(self, v_dir: Path, date_hint: str | None) -> bool:
+        if not v_dir.is_dir():
+            return False
+        if not (v_dir / MANIFEST_FILE).exists():
+            return False
+        if date_hint and date_hint not in v_dir.name:
+            return False
+        return True
+
     def _find_target_versions(
         self, project_name: str = None, date_hint: str = None
     ) -> list[Path]:
-        versions = []
-        # If path is not exist, we will refund empty list
         if not self.backup_base.exists():
             return []
 
@@ -312,20 +325,19 @@ class BackupManager:
             ]
         )
 
-        for p_dir in search_dirs:
-            if not p_dir.exists():
-                continue
-            for v_dir in p_dir.iterdir():
-                if v_dir.is_dir() and (v_dir / "manifest.json").exists():
-                    if date_hint and date_hint not in v_dir.name:
-                        continue
-                    versions.append(v_dir)
+        versions = [
+            v_dir
+            for p_dir in search_dirs
+            if p_dir.exists()
+            for v_dir in p_dir.iterdir()
+            if self._version_matches(v_dir, date_hint)
+        ]
 
         versions.sort(key=lambda x: x.name)
         return versions
 
     def verify_password(self, project_name, version_name, password, fetch_proxy=None):
-        manifest_path = self.backup_base / project_name / version_name / "manifest.json"
+        manifest_path = self.backup_base / project_name / version_name / MANIFEST_FILE
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
@@ -340,10 +352,12 @@ class BackupManager:
         first_rel_path = next(iter(files))
         info = manifest["files"][first_rel_path]
 
+        is_compressed_globally = manifest["info"].get("compression_enabled", False)
+
         obj_path = self._get_object_path(
             info["hash"],
             encrypted=True,
-            compressed=info.get("compressed", False),
+            compressed=is_compressed_globally,
             salt=salt_hex,
         )
 
@@ -351,11 +365,18 @@ class BackupManager:
             if fetch_proxy:
                 data = fetch_proxy(obj_path.relative_to(self.backup_base))
             else:
+                if not obj_path.exists():
+                    logger.error(
+                        f"Verification failed: Object {obj_path.name} not found."
+                    )
+                    return False
                 with open(obj_path, "rb") as f:
                     data = f.read()
 
             test_crypter = FileCrypter(password, bytes.fromhex(salt_hex))
             test_crypter.decrypt(data)
             return True
-        except Exception:
+        except Exception as e:
+            # If this is an authentication error ChaCha20Poly1305, False is returned
+            logger.debug(f"Decryption check failed: {e}")
             return False
