@@ -3,6 +3,7 @@ import getpass
 import json
 import shutil
 import os
+import tempfile
 from dotenv import load_dotenv
 from cloud_manager import CloudManager
 from pathlib import Path
@@ -65,7 +66,7 @@ def _setup_storage(is_cloud: bool):
             bucket_name=os.getenv("S3_BUCKET", "backup"),
         )
 
-        backup_base = Path("/tmp/cloud_temp").resolve()
+        backup_base = Path(tempfile.gettempdir()) / "smart_backup_cloud_temp"
         backup_base.mkdir(exist_ok=True)
         return cloud, backup_base
 
@@ -173,7 +174,7 @@ def handle_backup(
         after_obj_created=upload_hook if is_cloud else None,
     )
 
-    if is_cloud and backup_base.name == "cloud_temp":
+    if is_cloud and backup_base.name == "smart_backup_cloud_temp":
         shutil.rmtree(backup_base)
 
     print("\n" + "—" * 30)
