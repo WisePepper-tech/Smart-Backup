@@ -117,8 +117,7 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          config-path: .gitleaks.toml
+          GITLEAKS_CONFIG: .gitleaks.toml
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@0d579ffd059c29b07949a3cce3983f0780820c98  # v4.32.6
