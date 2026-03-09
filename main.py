@@ -52,26 +52,36 @@ def _setup_storage(is_cloud: bool):
     """Initialises cloud or local storage. Returns (cloud, backup_base) or None on failure."""
     load_dotenv()
 
+    endpoint = os.getenv("S3_ENDPOINT", "http://minio:9000")
+
+    if not os.getenv("DOCKER_MODE") and "minio" in endpoint:
+        endpoint = endpoint.replace("minio", "localhost")
+
     if is_cloud:
         cloud = CloudManager(
-            endpoint=os.getenv("S3_ENDPOINT"),
+            endpoint=endpoint,
             access_key=os.getenv("S3_ACCESS_KEY"),
             secret_key=os.getenv("S3_SECRET_KEY"),
             bucket_name=os.getenv("S3_BUCKET", "backup"),
         )
-        backup_base = Path("cloud_temp").resolve()
+
+        backup_base = Path("/tmp/cloud_temp").resolve()
         backup_base.mkdir(exist_ok=True)
         return cloud, backup_base
 
     cloud = None
-    backup_base = get_safe_path("Enter path for storage [/data]: ") or Path(DOCKER_DATA_PATH)
+    backup_base = get_safe_path("Enter path for storage [/data]: ") or Path(
+        DOCKER_DATA_PATH
+    )
     if not backup_base:
         print("Error: Storage path is required!")
         return None
     return cloud, backup_base
 
 
-def _load_last_manifest(manager: BackupManager, cloud, backup_base: Path, project_name: str, is_cloud: bool):
+def _load_last_manifest(
+    manager: BackupManager, cloud, backup_base: Path, project_name: str, is_cloud: bool
+):
     """Loads the last manifest for the project, returns manifest dict or None."""
     if is_cloud:
         print(f"[INFO] Checking cloud for '{project_name}'...")
@@ -93,9 +103,13 @@ def _load_last_manifest(manager: BackupManager, cloud, backup_base: Path, projec
     return None
 
 
-def handle_backup(manager: BackupManager, cloud, backup_base: Path, is_cloud: bool) -> bool:
+def handle_backup(
+    manager: BackupManager, cloud, backup_base: Path, is_cloud: bool
+) -> bool:
     """Handles the full backup flow. Returns False if user cancelled, True otherwise."""
-    source_path = get_safe_path("Enter path to source [/data]: ") or Path(DOCKER_DATA_PATH)
+    source_path = get_safe_path("Enter path to source [/data]: ") or Path(
+        DOCKER_DATA_PATH
+    )
     if not source_path or not source_path.exists():
         print(f"Error: The source folder '{source_path}' was not found!")
         return True
@@ -129,7 +143,9 @@ def handle_backup(manager: BackupManager, cloud, backup_base: Path, is_cloud: bo
     forced_salt = last_salt
 
     if last_m and (last_comp != compress_yn or last_enc != current_enc):
-        print(f"\n[!] WARNING: Parameters changed! Was: Comp={last_comp}, Enc={last_enc}")
+        print(
+            f"\n[!] WARNING: Parameters changed! Was: Comp={last_comp}, Enc={last_enc}"
+        )
         if input("Continue? (y/n): ").lower() != "y":
             return True
         forced_salt = None
@@ -170,7 +186,9 @@ def handle_backup(manager: BackupManager, cloud, backup_base: Path, is_cloud: bo
     return True
 
 
-def handle_restore(manager: BackupManager, cloud, backup_base: Path, is_cloud: bool) -> bool:
+def handle_restore(
+    manager: BackupManager, cloud, backup_base: Path, is_cloud: bool
+) -> bool:
     """Handles the full restore flow. Returns False if versions not found, True otherwise."""
     if is_cloud:
         print("[INFO] Syncing manifests from cloud...")
@@ -185,7 +203,8 @@ def handle_restore(manager: BackupManager, cloud, backup_base: Path, is_cloud: b
 
     proj_query = input("Directory name (Enter to search everywhere): ").strip() or None
     date_query = (
-        input("Part of the date/name of the version (Enter for latest): ").strip() or None
+        input("Part of the date/name of the version (Enter for latest): ").strip()
+        or None
     )
 
     found = manager._find_target_versions(proj_query, date_query)
@@ -201,7 +220,9 @@ def handle_restore(manager: BackupManager, cloud, backup_base: Path, is_cloud: b
 
     password = None
     if m_data["info"].get("salt"):
-        password = getpass.getpass("This backup is encrypted. Enter the password: ").strip()
+        password = getpass.getpass(
+            "This backup is encrypted. Enter the password: "
+        ).strip()
         print("[INFO] Verifying access...")
 
         if not manager.verify_password(

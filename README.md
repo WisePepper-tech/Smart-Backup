@@ -32,6 +32,8 @@ Smart-Backup is a lightweight yet powerful backup utility built on the principle
 - An `.env` file in the root directory (see `example.env`)
 - Python 3.13+ (required only for running without Docker)
 
+> **Windows:** Install Make first: `winget install GnuWin32.Make`
+
 ---
 
 ## ⚡ Quick Start
@@ -41,12 +43,71 @@ git clone https://github.com/WisePepper-tech/Smart-Backup
 cd Smart-Backup
 cp example.env .env
 # Edit .env with your settings
-make run ( you also can use command 'python main.py' )
+make run
 ```
 
-> **Windows:** Install Make first: `winget install GnuWin32.Make`
+---
 
-`make run` checks dependencies, builds the Docker image if source has changed, starts MinIO, and prompts for the source data path.
+## 🚦 Two Ways to Run
+
+Smart-Backup supports two launch modes with different path handling behaviour.
+
+### Option A — `make run` (recommended, Docker)
+
+```bash
+make run
+```
+
+Makefile asks for a **Windows path** before starting the container:
+
+```
+Enter full Windows path: C:/MyFiles
+```
+
+This path is **mounted as `/data` inside the container**. The application then runs in an isolated Docker environment where all file access is restricted to `/data`.
+
+```
+C:/MyFiles  →  mounted as  →  /data  (inside container)
+```
+
+Inside the program, when asked for a source or restore path — just press **Enter** to use `/data`, or enter a subfolder like `/data/docs`.
+
+**To back up one folder and restore to another**, mount a common parent:
+
+```
+Enter full Windows path: C:/
+→ /data/MyFiles    (backup source)
+→ /data/Restored   (restore target)
+```
+
+This way both paths are accessible inside the container without restarting.
+
+> **Why this exists:** The `/data` boundary is a security sandbox. `get_safe_path()` in the code actively prevents path traversal attacks (e.g. `../../etc/passwd`) by validating that all paths stay within `/data`. Mounting only what you need limits the attack surface.
+
+---
+
+### Option B — `python main.py` (direct, no Docker)
+
+```bash
+python main.py
+```
+
+No mounting, no `/data` sandbox — the program runs directly on your machine. You can enter any local path at runtime:
+
+```
+Enter path to source: C:/MyFiles
+Where to restore?:    C:/Restored
+```
+
+**Cloud (MinIO) with direct launch:** MinIO runs as a Docker container, but its API port `9000` is exposed to the host. The code automatically detects that `DOCKER_MODE` is not set and replaces the internal `minio` hostname with `localhost`:
+
+```
+S3_ENDPOINT=http://minio:9000  →  auto-replaced to  →  http://localhost:9000
+```
+
+So both `make run` and `python main.py` connect to the **same MinIO instance** and the same bucket — your data is in one place regardless of how you launched the app.
+
+> **Note:** MinIO must be running before using cloud mode with direct launch. Start it with `docker-compose up minio -d` or use `make run` which handles this automatically.
 
 ---
 
@@ -55,10 +116,7 @@ make run ( you also can use command 'python main.py' )
 Create a `.env` file in the root directory:
 
 ```env
-# Storage Mode: 1 = Local Only, 2 = Cloud Sync (S3)
-STORAGE_MODE=1
-
-# S3 Configuration (required if STORAGE_MODE=2)
+# S3 Configuration (required for cloud mode)
 S3_ENDPOINT=http://minio:9000
 S3_ACCESS_KEY=your_secure_access_key
 S3_SECRET_KEY=your_secure_secret_key
@@ -68,6 +126,8 @@ S3_BUCKET=smart-backups
 LOG_LEVEL=INFO
 DOCKER_MODE=true
 ```
+
+> `S3_REGION` is not used by MinIO but may be required by other S3-compatible endpoints.
 
 ---
 
@@ -81,7 +141,7 @@ Useful for fast snapshots of already-compressed data (images, archives, video).
 [1] New Backup
 Project name: my-photos
 Compress? (y/n): n
-Encrypt? (y/n): n
+Password (Enter for none): ⏎
 ```
 
 Result: files are stored as-is in the CAS object store. Identical files across backups are deduplicated automatically.
@@ -96,8 +156,7 @@ The standard secure workflow for source code, documents, or any text-heavy proje
 [1] New Backup
 Project name: work-docs
 Compress? (y/n): y
-Encrypt? (y/n): y
-Password: •••••••• 
+Password: ••••••••
 (The password is not displayed when you enter it)
 ```
 
@@ -142,7 +201,7 @@ Password: ••••••••
 (The password is not displayed when you enter it)
 ```
 
-Output path: `restore/work-docs_2025-03-09_00-24-17/`
+Output path: `<restore_target>/work-docs_2025-03-09_00-24-17/`
 
 All files are decrypted, decompressed, and verified against their original SHA-256 hash. A mismatch triggers an `ALARM` message.
 
@@ -156,25 +215,26 @@ Useful for server migration or forensic access — returns the encrypted/compres
 [2] Restore
 Project name: work-docs
 Select version: 2025-03-09_00-24-17
-Decrypt? (y/n): n
-Decompress? (y/n): n
+Recovery mode: 2 (Technical)
 ```
 
 Output: `report.docx.raw`, `notes.txt.raw`
 
-The `.raw` extension signals the file has not been processed. To a third-party observer the filename is the object hash — e.g. `a3f8c1...docx.raw` — with no indication of content. Removing `.raw` manually restores the original extension and the file opens normally (if it was stored unencrypted).
+The `.raw` extension signals the file has not been processed. The filename is the object hash — with no indication of content. Removing `.raw` manually restores the original extension and the file opens normally (if stored unencrypted).
 
 ---
 
 ### Scenario 6 — Cloud sync (S3 / MinIO)
 
-Set `STORAGE_MODE=2` in `.env`. After each backup the objects and manifest are automatically uploaded to S3. Restore works transparently — objects are fetched from the bucket via `fetch_proxy` if not found locally.
+Set storage mode to `2` when prompted. After each backup, objects and manifest are automatically uploaded to S3. Restore works transparently — objects are fetched from the bucket via `fetch_proxy` if not found locally.
 
 ```
+Storage mode: 1. Local  2. Cloud (MinIO) [1]: 2
+
 [1] New Backup
 Project name: offsite-archive
 → Uploading objects/a3/a3f8c1... ✓
-→ Uploading ProjectX/2025-03-09/manifest.json ✓
+→ Uploading offsite-archive/2025-03-09/manifest.json ✓
 ```
 
 ---
@@ -209,7 +269,7 @@ Project name: offsite-archive
 ## ✅ Tests
 
 ```bash
-python -m unittest discover
+python -m pytest
 ```
 
 The test suite covers:
@@ -220,6 +280,8 @@ The test suite covers:
 - Directory tree backup and restore (nested paths)
 - Non-compressible file handling (`.jpg`, `.mp4`, etc.)
 - Ignored extensions (`.tmp`, `.log`, `.bak`, `.swp`) are excluded from backups
+- Cloud manager: full mock coverage of S3 operations
+- Main flow: all branches of backup, restore, and path handling
 
 ---
 
