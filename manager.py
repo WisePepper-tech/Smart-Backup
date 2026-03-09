@@ -68,6 +68,62 @@ class BackupManager:
         data_len = int.from_bytes(padded_data[:4], byteorder="big")
         return padded_data[4 : 4 + data_len]
 
+    def _process_object(
+        self, path, f_hash, compress, should_compress, crypter, after_obj_created
+    ):
+        """Processes a single file: compress, pad, encrypt, save. Returns (copied, skipped)."""
+        current_salt = crypter.salt.hex() if crypter else ""
+        obj_path = self._get_object_path(
+            f_hash,
+            encrypted=bool(crypter),
+            compressed=compress,
+            salt=current_salt,
+        )
+        if obj_path.exists():
+            return 0, 1  # skipped
+
+        obj_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "rb") as f_in:
+            data = f_in.read()
+        if should_compress:
+            data = zlib.compress(data, level=6)
+        if should_compress or crypter:
+            data = self._add_padding(data)
+        if crypter:
+            data = crypter.encrypt(data)
+        with open(obj_path, "wb") as f_out:
+            f_out.write(data)
+        if after_obj_created:
+            after_obj_created(obj_path.relative_to(self.backup_base), data)
+        return 1, 0  # copied
+
+    def _decode_object(
+        self,
+        data,
+        crypter,
+        salt_hex,
+        file_specific_compression,
+        decrypt_data,
+        decompress_data,
+    ):
+        """Decrypt → unpad → decompress."""
+        if decrypt_data and crypter:
+            data = crypter.decrypt(data)  # raises on wrong password
+
+        if (decrypt_data or not salt_hex) and decompress_data:
+            if file_specific_compression or salt_hex:
+                try:
+                    data = self._remove_padding(data)
+                except Exception:
+                    pass
+
+        if decompress_data and file_specific_compression:
+            try:
+                data = zlib.decompress(data)
+            except Exception:
+                logger.error("Decompression error")
+        return data
+
     def create_backup(
         self,
         scan_result: ScanResult,
@@ -90,48 +146,16 @@ class BackupManager:
 
         for path, f_hash in scan_result.file_hashes.items():
             should_compress = compress and (path.suffix.lower() not in NON_COMPRESSIBLE)
-            current_salt = crypter.salt.hex() if crypter else ""
-            obj_path = self._get_object_path(
-                f_hash,
-                encrypted=bool(password),
-                compressed=compress,
-                salt=current_salt,
-            )
-
-            if not obj_path.exists():
-                try:
-                    obj_path.parent.mkdir(parents=True, exist_ok=True)
-
-                    # Read original
-                    with open(path, "rb") as f_in:
-                        data = f_in.read()
-
-                    # Compress if "on"
-                    if should_compress:
-                        data = zlib.compress(data, level=6)
-
-                    # Compress if "on" or Encrypt if "on"
-                    if (should_compress) or (crypter is not None):
-                        data = self._add_padding(data)
-
-                    # Encrypt if "on"
-                    if crypter:
-                        data = crypter.encrypt(data)
-
-                    # Save result
-                    with open(obj_path, "wb") as f_out:
-                        f_out.write(data)
-
-                    if after_obj_created:
-                        after_obj_created(obj_path.relative_to(self.backup_base), data)
-
-                    copied_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to process {path}: {e}")
-                    errors += 1
-                    continue
-            else:
-                skipped_count += 1
+            try:
+                c, s = self._process_object(
+                    path, f_hash, compress, should_compress, crypter, after_obj_created
+                )
+                copied_count += c
+                skipped_count += s
+            except Exception as e:
+                logger.error(f"Failed to process {path}: {e}")
+                errors += 1
+                continue
 
             rel_path = path.relative_to(source_path)
             # Important: write flag "compressed" in the manifest for each file
@@ -238,27 +262,14 @@ class BackupManager:
                     with open(obj_path, "rb") as f_in:
                         data = f_in.read()
 
-                # Decryption
-                if decrypt_data and crypter:
-                    try:
-                        data = crypter.decrypt(data)
-                    except Exception:
-                        raise PermissionError(f"Invalid password for {rel_path_str}")
-
-                # Removing padding: Padding was added if the file was compressed OR if cryptography was enabled
-                if (decrypt_data or not salt_hex) and decompress_data:
-                    if file_specific_compression or salt_hex:
-                        try:
-                            data = self._remove_padding(data)
-                        except Exception:
-                            pass
-
-                # AUTO—DECOMPRESSION: if there is a compression flag in the manifest, decompress
-                if decompress_data and file_specific_compression:
-                    try:
-                        data = zlib.decompress(data)
-                    except Exception:
-                        logger.error(f"Decompression error {rel_path_str}")
+                data = self._decode_object(
+                    data,
+                    crypter,
+                    salt_hex,
+                    file_specific_compression,
+                    decrypt_data,
+                    decompress_data,
+                )
 
                 # Write clean data
                 final_path = (
@@ -367,7 +378,7 @@ class BackupManager:
             else:
                 if not obj_path.exists():
                     logger.error(
-                        f"Verification failed: Object {obj_path.name} not found."
+                        "Verification failed: Object %s not found.", obj_path.name
                     )
                     return False
                 with open(obj_path, "rb") as f:

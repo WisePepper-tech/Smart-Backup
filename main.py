@@ -104,16 +104,31 @@ def _load_last_manifest(
     return None
 
 
-def handle_backup(
-    manager: BackupManager, cloud, backup_base: Path, is_cloud: bool
-) -> bool:
-    """Handles the full backup flow. Returns False if user cancelled, True otherwise."""
+def _check_param_changes(
+    last_m, last_comp, last_enc, compress_yn, current_enc, last_salt
+):
+    """Returns forced_salt or raises SystemExit if user aborts."""
+    forced_salt = last_salt
+    if last_m and (last_comp != compress_yn or last_enc != current_enc):
+        print(
+            f"\n[!] WARNING: Parameters changed! Was: Comp={last_comp}, Enc={last_enc}"
+        )
+        if input("Continue? (y/n): ").lower() != "y":
+            return None, True  # (forced_salt, aborted)
+        forced_salt = None
+    if last_enc and current_enc:
+        if input("Generate new security key (Salt)? (y/n): ").lower() == "y":
+            forced_salt = None
+    return forced_salt, False
+
+
+def handle_backup(manager, cloud, backup_base, is_cloud) -> None:
     source_path = get_safe_path("Enter path to source [/data]: ") or Path(
         DOCKER_DATA_PATH
     )
     if not source_path or not source_path.exists():
         print(f"Error: The source folder '{source_path}' was not found!")
-        return True
+        return
 
     project_name = (
         input(f"Specify the name of the directory [{source_path.name}]: ").strip()
@@ -141,19 +156,11 @@ def handle_backup(
     password = pass_input if pass_input else None
     current_enc = password is not None
 
-    forced_salt = last_salt
-
-    if last_m and (last_comp != compress_yn or last_enc != current_enc):
-        print(
-            f"\n[!] WARNING: Parameters changed! Was: Comp={last_comp}, Enc={last_enc}"
-        )
-        if input("Continue? (y/n): ").lower() != "y":
-            return True
-        forced_salt = None
-
-    if last_enc and current_enc:
-        if input("Generate new security key (Salt)? (y/n): ").lower() == "y":
-            forced_salt = None
+    forced_salt, aborted = _check_param_changes(
+        last_m, last_comp, last_enc, compress_yn, current_enc, last_salt
+    )
+    if aborted:
+        return
 
     print("\n[1/2] Scanning...")
     scan_result = scan_files(source_path, progress_callback=show_progress)
@@ -184,13 +191,9 @@ def handle_backup(
     print("—" * 30)
 
     input(PRESS_ENTER)
-    return True
 
 
-def handle_restore(
-    manager: BackupManager, cloud, backup_base: Path, is_cloud: bool
-) -> bool:
-    """Handles the full restore flow. Returns False if versions not found, True otherwise."""
+def handle_restore(manager, cloud, backup_base, is_cloud) -> None:
     if is_cloud:
         print("[INFO] Syncing manifests from cloud...")
         manifest_keys = cloud.list_manifests()
@@ -211,7 +214,7 @@ def handle_restore(
     found = manager._find_target_versions(proj_query, date_query)
     if not found:
         print("Versions not found.")
-        return False
+        return
 
     target_v = found[-1]
     print(f"\nVersion selected: {target_v.parent.name} / {target_v.name}")
@@ -234,7 +237,6 @@ def handle_restore(
         ):
             print("\n[!!!] Access Denied: Invalid password.")
             input(PRESS_ENTER)
-            return True
 
     target_path = get_safe_path("Where to restore?: ")
 
@@ -269,7 +271,6 @@ def handle_restore(
         print("[INFO] Empty recovery directory removed.")
 
     input(PRESS_ENTER)
-    return True
 
 
 def main():

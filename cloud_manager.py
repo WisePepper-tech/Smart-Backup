@@ -4,6 +4,7 @@ import boto3
 import os
 import sys
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from pathlib import Path
 from io import BytesIO
 
@@ -17,7 +18,13 @@ class CloudManager:
             endpoint_url=endpoint,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
+            config=Config(
+                connect_timeout=5,
+                read_timeout=10,
+                retries={"max_attempts": 1},
+            ),
         )
+
         self.bucket = bucket_name
         self._ensure_bucket()
 
