@@ -35,4 +35,7 @@ Thumbs.db
 *.log
 
 # Test cache
-.pytest_cache/
+.pytest_cache/.coverage
+.coverage.*
+coverage.xml
+htmlcov/
