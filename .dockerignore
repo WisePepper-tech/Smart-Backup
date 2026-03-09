@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 tests/
+coverage.xml
+*.egg-info/
+dist/
+build/
 docs/
 *.md
 .env

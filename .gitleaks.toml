@@ -1,4 +1,3 @@
-# .gitleaks.toml
 title = "Smart-Backup Gitleaks Config"
 
 [allowlist]
