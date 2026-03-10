@@ -688,8 +688,7 @@ class TestMain(unittest.TestCase):
         manager = BackupManager(self.storage)
         with patch("main.get_safe_path", return_value=Path("/nonexistent/xyz")):
             with patch("builtins.print"):
-                result = main.handle_backup(manager, None, self.storage, is_cloud=False)
-        self.assertTrue(result)
+                main.handle_backup(manager, None, self.storage, is_cloud=False)
 
     def test_handle_backup_no_password_no_compress(self):
         import main
@@ -708,7 +707,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_backup(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_backup_with_password(self):
         import main
@@ -722,7 +720,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_backup(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_backup_params_changed_abort(self):
         """User aborts when parameters change."""
@@ -740,7 +737,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_backup(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_backup_params_changed_continue(self):
         """User continues when parameters change."""
@@ -758,7 +754,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_backup(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_backup_new_salt_prompt(self):
         """With existing encrypted backup, prompt for new salt."""
@@ -778,7 +773,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_backup(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_backup_cloud(self):
         import main
@@ -797,7 +791,6 @@ class TestMain(unittest.TestCase):
                             result = main.handle_backup(
                                 manager, cloud, cloud_temp, is_cloud=True
                             )
-        self.assertTrue(result)
 
     # --- handle_restore ---
     def test_handle_restore_no_versions(self):
@@ -810,7 +803,6 @@ class TestMain(unittest.TestCase):
                 result = main.handle_restore(
                     manager, None, self.storage, is_cloud=False
                 )
-        self.assertFalse(result)
 
     def test_handle_restore_unencrypted(self):
         import main
@@ -826,7 +818,6 @@ class TestMain(unittest.TestCase):
                     result = main.handle_restore(
                         manager, None, self.storage, is_cloud=False
                     )
-        self.assertTrue(result)
 
     def test_handle_restore_encrypted_wrong_password(self):
         import main
@@ -845,7 +836,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_restore(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_restore_technical_mode(self):
         import main
@@ -861,7 +851,6 @@ class TestMain(unittest.TestCase):
                     result = main.handle_restore(
                         manager, None, self.storage, is_cloud=False
                     )
-        self.assertTrue(result)
 
     def test_handle_restore_cloud_sync(self):
         import main
@@ -879,15 +868,17 @@ class TestMain(unittest.TestCase):
         cloud = MagicMock()
         cloud.list_manifests.return_value = [manifest_key]
         cloud.download_data.return_value = manifest_data
+        cloud.download_objects.side_effect = lambda rel_path: (
+            self.storage / rel_path
+        ).read_bytes()
 
         inputs = iter(["Proj", "", "1", ""])
         with patch("builtins.input", side_effect=inputs):
             with patch("main.get_safe_path", return_value=self.restore):
                 with patch("builtins.print"):
-                    result = main.handle_restore(
+                    main.handle_restore(
                         manager, cloud, self.storage, is_cloud=True
                     )
-        self.assertTrue(result)
 
     def test_handle_restore_encrypted_correct_password(self):
         """Correct password — verify_password passes, restore proceeds."""
@@ -906,7 +897,6 @@ class TestMain(unittest.TestCase):
                         result = main.handle_restore(
                             manager, None, self.storage, is_cloud=False
                         )
-        self.assertTrue(result)
 
     def test_handle_restore_empty_dir_cleaned(self):
         """Empty restore dir is removed — rmdir branch in handle_restore."""

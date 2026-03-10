@@ -237,6 +237,7 @@ def handle_restore(manager, cloud, backup_base, is_cloud) -> None:
         ):
             print("\n[!!!] Access Denied: Invalid password.")
             input(PRESS_ENTER)
+            return
 
     target_path = get_safe_path("Where to restore?: ")
 
