@@ -177,9 +177,19 @@ class BackupManager:
                 "timestamp": timestamp,
                 "salt": crypter.salt.hex() if crypter else None,
                 "encryption": "ChaCha20-Poly1305" if crypter else None,
+                "kdf_params": (
+                    {
+                        "algorithm": "argon2id",
+                        "time_cost": FileCrypter._TIME_COST,
+                        "memory_cost": FileCrypter._MEMORY_COST,
+                        "parallelism": FileCrypter._PARALLELISM,
+                    }
+                    if crypter
+                    else None
+                ),
                 "comment": comment,
                 "total_files": scan_result.total_files,
-                "compression_enabled": compress,  # A common flag for the entire version
+                "compression_enabled": compress,
             },
             "files": manifest_files,
         }
@@ -223,11 +233,7 @@ class BackupManager:
             manifest = json.load(f)
 
         salt_hex = manifest["info"].get("salt")
-        crypter = (
-            FileCrypter(password, bytes.fromhex(salt_hex))
-            if salt_hex and password
-            else None
-        )
+        crypter = self._crypter_from_manifest(manifest, password) if password else None
 
         total_files = manifest["info"]["total_files"]
         success_count = 0
@@ -347,6 +353,22 @@ class BackupManager:
         versions.sort(key=lambda x: x.name)
         return versions
 
+    def _crypter_from_manifest(
+        self, manifest: dict, password: str
+    ) -> "FileCrypter | None":
+        """Creates a FileCrypter with parameters from the manifest."""
+        salt_hex = manifest["info"].get("salt")
+        if not salt_hex or not password:
+            return None
+        kdf = manifest["info"].get("kdf_params") or {}
+        return FileCrypter(
+            password,
+            salt=bytes.fromhex(salt_hex),
+            time_cost=kdf.get("time_cost"),
+            memory_cost=kdf.get("memory_cost"),
+            parallelism=kdf.get("parallelism"),
+        )
+
     def verify_password(self, project_name, version_name, password, fetch_proxy=None):
         manifest_path = self.backup_base / project_name / version_name / MANIFEST_FILE
         with open(manifest_path, "r", encoding="utf-8") as f:
@@ -384,7 +406,9 @@ class BackupManager:
                 with open(obj_path, "rb") as f:
                     data = f.read()
 
-            test_crypter = FileCrypter(password, bytes.fromhex(salt_hex))
+            test_crypter = self._crypter_from_manifest(manifest, password)
+            if test_crypter is None:
+                return False
             test_crypter.decrypt(data)
             return True
         except Exception as e:

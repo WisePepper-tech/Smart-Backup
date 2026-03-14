@@ -3,8 +3,14 @@ import json
 import shutil
 import sys
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from pydantic import ValidationError
+
+os.environ.setdefault("API_KEY", "test-key-for-ci")
+os.environ.setdefault("BACKUP_PATH", "/tmp/test-backups")
+os.environ.setdefault("ALLOWED_SOURCE_PATH", "/data")
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -14,6 +20,7 @@ from hasher import get_file_hash
 from scanner import scan_files, _should_skip, _process_file
 from manager import BackupManager
 from crypter import FileCrypter
+from api import BackupRequest
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +288,7 @@ class TestBackupManagerEdgeCases(unittest.TestCase):
         ver_dir = self.storage / "Proj" / "2099-01-01_00-00-00"
         ver_dir.mkdir(parents=True)
         manifest = {
-            "info": {"salt": "aabbcc", "compression_enabled": False},
+            "info": {"salt": "aabbccdd" * 4, "compression_enabled": False},
             "files": {},
         }
         with open(ver_dir / "manifest.json", "w") as f:
@@ -876,9 +883,7 @@ class TestMain(unittest.TestCase):
         with patch("builtins.input", side_effect=inputs):
             with patch("main.get_safe_path", return_value=self.restore):
                 with patch("builtins.print"):
-                    main.handle_restore(
-                        manager, cloud, self.storage, is_cloud=True
-                    )
+                    main.handle_restore(manager, cloud, self.storage, is_cloud=True)
 
     def test_handle_restore_encrypted_correct_password(self):
         """Correct password — verify_password passes, restore proceeds."""
@@ -1124,6 +1129,52 @@ class TestBackupSystem(unittest.TestCase):
     def tearDown(self):
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
+
+
+# ---------------------------------------------------------------------------
+# Tests for API (api.py)
+# ---------------------------------------------------------------------------
+
+
+class TestApiValidators(unittest.TestCase):
+    def test_project_name_valid(self):
+
+        # Pydantic v2 — validating via model_validate
+        req = BackupRequest.model_validate(
+            {
+                "source_path": "/data/test",
+                "project_name": "my-project",
+            }
+        )
+        self.assertEqual(req.project_name, "my-project")
+
+    def test_project_name_invalid(self):
+        with self.assertRaises(ValidationError):
+            BackupRequest.model_validate(
+                {
+                    "source_path": "/data/test",
+                    "project_name": "../../etc",
+                }
+            )
+
+    def test_source_path_outside_allowed(self):
+        with self.assertRaises(ValidationError):
+            BackupRequest.model_validate(
+                {
+                    "source_path": "/etc/passwd",
+                    "project_name": "proj",
+                }
+            )
+
+    def test_comment_too_long(self):
+        with self.assertRaises(ValidationError):
+            BackupRequest.model_validate(
+                {
+                    "source_path": "/data/test",
+                    "project_name": "proj",
+                    "comment": "x" * 501,
+                }
+            )
 
 
 if __name__ == "__main__":

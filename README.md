@@ -8,6 +8,8 @@ Smart-Backup is a lightweight yet powerful backup utility built on the principle
 
 **AEAD Encryption:** ChaCha20-Poly1305 — a modern standard providing both data confidentiality and integrity verification.
 
+**Argon2id Key Derivation:** Passwords are stretched using Argon2id (OWASP-recommended, 64 MB memory, 3 iterations) — resistant to GPU and side-channel attacks. KDF parameters are stored in each backup manifest, ensuring future-proof decryption even if defaults change.
+
 **Traffic Analysis Protection:** Automatic padding to 256-byte block alignment, masking exact file sizes from side-channel analysis.
 
 **Zero-Knowledge:** Passwords and keys never leave your local machine and are never stored in plaintext.
@@ -23,6 +25,8 @@ Smart-Backup is a lightweight yet powerful backup utility built on the principle
 **Integrity Guard:** Every restoration is verified against its original SHA-256 hash.
 
 **Flexible Recovery:** Supports standard and "technical" recovery modes — useful for secure migration between servers.
+
+**REST API:** Optional FastAPI service exposing backup and listing endpoints, secured with API key authentication and per-IP rate limiting.
 
 ---
 
@@ -42,15 +46,13 @@ Smart-Backup is a lightweight yet powerful backup utility built on the principle
 git clone https://github.com/WisePepper-tech/Smart-Backup
 cd Smart-Backup
 cp example.env .env
-# Edit .env with your settings
+# Edit .env with your credentials and API_KEY
 make run
 ```
 
 ---
 
-## 🚦 Two Ways to Run
-
-Smart-Backup supports two launch modes with different path handling behaviour.
+## 🚦 Three Ways to Run
 
 ### Option A — `make run` (recommended, Docker)
 
@@ -64,13 +66,13 @@ Makefile asks for a **Windows path** before starting the container:
 Enter full Windows path: C:/MyFiles
 ```
 
-This path is **mounted as `/data` inside the container**. The application then runs in an isolated Docker environment where all file access is restricted to `/data`.
+This path is **mounted as `/data` inside the container**. All file access is restricted to `/data`.
 
 ```
 C:/MyFiles  →  mounted as  →  /data  (inside container)
 ```
 
-Inside the program, when asked for a source or restore path — just press **Enter** to use `/data`, or enter a subfolder like `/data/docs`.
+Inside the program, press **Enter** to use `/data`, or enter a subfolder like `/data/docs`.
 
 **To back up one folder and restore to another**, mount a common parent:
 
@@ -80,9 +82,7 @@ Enter full Windows path: C:/
 → /data/Restored   (restore target)
 ```
 
-This way both paths are accessible inside the container without restarting.
-
-> **Why this exists:** The `/data` boundary is a security sandbox. `get_safe_path()` in the code actively prevents path traversal attacks (e.g. `../../etc/passwd`) by validating that all paths stay within `/data`. Mounting only what you need limits the attack surface.
+> **Why this exists:** The `/data` boundary is a security sandbox. `get_safe_path()` actively prevents path traversal attacks by validating that all paths stay within `/data`.
 
 ---
 
@@ -92,28 +92,62 @@ This way both paths are accessible inside the container without restarting.
 python main.py
 ```
 
-No mounting, no `/data` sandbox — the program runs directly on your machine. You can enter any local path at runtime:
+No mounting, no `/data` sandbox — the program runs directly on your machine:
 
 ```
 Enter path to source: C:/MyFiles
 Where to restore?:    C:/Restored
 ```
 
-**Cloud (MinIO) with direct launch:** MinIO runs as a Docker container, but its API port `9000` is exposed to the host. The code automatically detects that `DOCKER_MODE` is not set and replaces the internal `minio` hostname with `localhost`:
+**Cloud (MinIO) with direct launch:** The code automatically replaces the internal `minio` hostname with `localhost`:
 
 ```
 S3_ENDPOINT=http://minio:9000  →  auto-replaced to  →  http://localhost:9000
 ```
 
-So both `make run` and `python main.py` connect to the **same MinIO instance** and the same bucket — your data is in one place regardless of how you launched the app.
+> **Note:** Start MinIO first with `docker-compose up minio -d` or use `make run`.
 
-> **Note:** MinIO must be running before using cloud mode with direct launch. Start it with `docker-compose up minio -d` or use `make run` which handles this automatically.
+---
+
+### Option C — REST API (FastAPI)
+
+```bash
+docker-compose up minio api -d
+```
+
+The API runs on port `8000`. All endpoints require the `X-API-Key` header matching `API_KEY` from `.env`.
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check (no auth required) |
+| `GET` | `/backups?project=name` | List backup versions |
+| `POST` | `/backup` | Create a new backup |
+
+**Example — create backup:**
+
+```bash
+curl -X POST http://localhost:8000/backup \
+  -H "X-API-Key: your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"source_path": "/data/docs", "project_name": "my-docs", "compress": true}'
+```
+
+**Example — list backups:**
+
+```bash
+curl http://localhost:8000/backups \
+  -H "X-API-Key: your_api_key"
+```
+
+**Path security:** `source_path` must be inside `ALLOWED_SOURCE_PATH` (default: `/data`). `project_name` is validated against `[a-zA-Z0-9_-]{1,64}`. Invalid paths return HTTP 422.
+
+**Rate limits:** `GET /backups` — 30 req/min, `POST /backup` — 10 req/min per IP.
 
 ---
 
 ## ⚙️ Configuration
-
-Create a `.env` file in the root directory:
 
 ```env
 # S3 Configuration (required for cloud mode)
@@ -122,20 +156,26 @@ S3_ACCESS_KEY=your_secure_access_key
 S3_SECRET_KEY=your_secure_secret_key
 S3_BUCKET=smart-backups
 
+# API (required when running the API service)
+API_KEY=your_generated_api_key
+ALLOWED_SOURCE_PATH=/data
+
 # App Settings
-LOG_LEVEL=INFO
+BACKUP_PATH=/data
 DOCKER_MODE=true
 ```
 
-> `S3_REGION` is not used by MinIO but may be required by other S3-compatible endpoints.
+**Generate a secure API key:**
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
 
 ---
 
 ## 📖 Usage Scenarios
 
 ### Scenario 1 — Simple local backup (no encryption, no compression)
-
-Useful for fast snapshots of already-compressed data (images, archives, video).
 
 ```
 [1] New Backup
@@ -144,36 +184,33 @@ Compress? (y/n): n
 Password (Enter for none): ⏎
 ```
 
-Result: files are stored as-is in the CAS object store. Identical files across backups are deduplicated automatically.
+Files are stored as-is in the CAS object store. Identical files deduplicated automatically.
 
 ---
 
 ### Scenario 2 — Encrypted + compressed backup
-
-The standard secure workflow for source code, documents, or any text-heavy project.
 
 ```
 [1] New Backup
 Project name: work-docs
 Compress? (y/n): y
 Password: ••••••••
-(The password is not displayed when you enter it)
 ```
 
 Processing pipeline:
-1. **Scan** — SHA-256 hash generated per file
-2. **Compress** — Zlib (skipped automatically for `.jpg`, `.mp4`, `.zip`, etc.)
-3. **Pad** — random padding added for block alignment
-4. **Encrypt** — ChaCha20-Poly1305 with unique salt per backup session
+1. **Scan** — SHA-256 hash per file
+2. **Compress** — Zlib (skipped for `.jpg`, `.mp4`, `.zip`, etc.)
+3. **Pad** — random padding to 256-byte block alignment
+4. **Encrypt** — ChaCha20-Poly1305 with Argon2id-derived key and unique salt
 5. **Store** — written to `objects/xx/hash`
 
-> ⚠️ If you change compression or encryption settings on the next backup of the same project, Smart-Backup will warn you and show the previous parameters before proceeding.
+KDF parameters (`time_cost`, `memory_cost`, `parallelism`) are recorded in `manifest.json` alongside the salt — ensuring correct decryption regardless of future parameter changes.
+
+> ⚠️ If you change compression or encryption settings on the next backup of the same project, Smart-Backup will warn you before proceeding.
 
 ---
 
 ### Scenario 3 — Changing backup parameters mid-project
-
-You previously backed up `work-docs` with compression enabled. Now you want to disable it.
 
 ```
 [1] New Backup
@@ -185,48 +222,38 @@ Compress? (y/n): n   ← changed from previous
    Continue? (y/n):
 ```
 
-Both versions coexist. Each version stores its own parameters in `manifest.json`.
+Both versions coexist. Each stores its own parameters in `manifest.json`.
 
 ---
 
 ### Scenario 4 — Standard restore
-
-Restores files to their original state in a safe subfolder.
 
 ```
 [2] Restore
 Project name: work-docs
 Select version: 2025-03-09_00-24-17
 Password: ••••••••
-(The password is not displayed when you enter it)
 ```
 
-Output path: `<restore_target>/work-docs_2025-03-09_00-24-17/`
+Files are decrypted, decompressed, and verified against their original SHA-256 hash. A mismatch triggers an `ALARM` message.
 
-All files are decrypted, decompressed, and verified against their original SHA-256 hash. A mismatch triggers an `ALARM` message.
+Output: `<restore_target>/work-docs_2025-03-09_00-24-17/`
 
 ---
 
 ### Scenario 5 — Technical restore (raw blobs)
 
-Useful for server migration or forensic access — returns the encrypted/compressed blobs without processing.
-
 ```
 [2] Restore
 Project name: work-docs
-Select version: 2025-03-09_00-24-17
 Recovery mode: 2 (Technical)
 ```
 
-Output: `report.docx.raw`, `notes.txt.raw`
-
-The `.raw` extension signals the file has not been processed. The filename is the object hash — with no indication of content. Removing `.raw` manually restores the original extension and the file opens normally (if stored unencrypted).
+Returns encrypted/compressed blobs without processing. Output files get a `.raw` extension.
 
 ---
 
 ### Scenario 6 — Cloud sync (S3 / MinIO)
-
-Set storage mode to `2` when prompted. After each backup, objects and manifest are automatically uploaded to S3. Restore works transparently — objects are fetched from the bucket via `fetch_proxy` if not found locally.
 
 ```
 Storage mode: 1. Local  2. Cloud (MinIO) [1]: 2
@@ -239,30 +266,51 @@ Project name: offsite-archive
 
 ---
 
+### Scenario 7 — Portable restore (different machine)
+
+After `git pull` on a new machine with the same `.env`:
+
+```
+Storage mode: 2 (Cloud)
+[2] Restore
+Password: ••••••••  ← same password as during backup
+```
+
+Argon2id re-derives the identical key from password + salt (read from manifest). All data decrypts correctly.
+
+---
+
 ## 🔧 Makefile Commands
 
-| Command | Description |
-|---|---|
-| `make run` | Standard launch: prepare, build, and run interactively |
-| `make build` | Rebuild the Docker image (only if source files changed) |
-| `make local-build` | Full rebuild from scratch, no cache, forced pull |
-| `make down` | Stop all containers and MinIO infrastructure |
-| `make clean` | Full reset: remove images, MinIO volumes, and wheels folder |
-| `make logs` | View MinIO logs for connection troubleshooting |
+|       Command      |                         Description                         |
+|--------------------|-------------------------------------------------------------|
+| `make run`         | Standard launch: prepare, build, and run interactively      |
+| `make build`       | Rebuild the Docker image (only if source files changed)     |
+| `make api`         | Start MinIO + API service in background                     |
+| `make local-build` | Full rebuild from scratch, no cache, forced pull            |
+| `make down`        | Stop all containers                                         |
+| `make clean`       | Full reset: remove images, MinIO volumes, and wheels folder |
+| `make logs`        | View MinIO logs for connection troubleshooting              |
 
 ---
 
 ## 🛡 Security & CI/CD Architecture
 
-**Supply Chain Protection:** All base images are pinned using immutable SHA256 digests. Dependencies are verified against pre-computed hashes in `requirements.txt`.
+**Supply Chain Protection:** Base images pinned via immutable SHA256 digests. Dependencies verified against pre-computed hashes (`requirements.txt`, `requirements-dev.txt`, `requirements-sbom.txt`).
 
-**Environment Isolation:**
-- Vendoring: dependencies are downloaded locally and injected into the image
-- Network Sandbox: Docker build runs with `--network=none` to prevent exfiltration
+**Hermetic Build:** Docker image built with `--network=none` — dependencies vendored before build, no network access during compilation.
 
 **Principle of Least Privilege:** Application runs as non-privileged `appuser` (UID 10001), restricted to `/app` and the mounted `/data` volume.
 
-**Artifact Provenance:** Images are signed via Cosign and include SLSA Attestations and SBOM (Software Bill of Materials).
+**CI Pipeline (GitHub Actions):**
+- `tests` — pytest with coverage report
+- `checks` — GPG commit verification, license scan, TruffleHog, Gitleaks, CodeQL, SonarQube
+- `security` — pip-audit (CVE check for all requirement files), Bandit, Semgrep, Trivy FS
+- `dependency_guard` — blocks PRs that modify requirements without explicit review
+- `build` — hermetic Docker build, Trivy image scan, push to GHCR
+- `attest_and_signing` — SBOM generation (CycloneDX), SLSA provenance, Cosign keyless signing and verification
+
+**Artifact Provenance:** Images signed via Cosign with SLSA attestations and SBOM attached to the registry manifest.
 
 ---
 
@@ -272,18 +320,13 @@ Project name: offsite-archive
 python -m pytest
 ```
 
-The test suite covers:
-
-- Full encryption + decryption cycle with integrity verification
-- Deduplication: identical files produce a single object
-- Salt isolation: different salts produce different objects for the same file
-- Directory tree backup and restore (nested paths)
-- Non-compressible file handling (`.jpg`, `.mp4`, etc.)
-- Ignored extensions (`.tmp`, `.log`, `.bak`, `.swp`) are excluded from backups
-- Cloud manager: full mock coverage of S3 operations
-- Main flow: all branches of backup, restore, and path handling
+Coverage includes: encryption/decryption cycle, deduplication, salt isolation, directory tree backup/restore, non-compressible file handling, ignored extensions, cloud manager (full S3 mock), API validators (path whitelist, project name regex, comment length), and all branches of the main CLI flow.
 
 ---
+
+> **Storage tip:** For consistent access across all launch methods (CLI, Docker, API),
+> always use cloud mode (Storage mode: 2). Local mode creates isolated storage
+> per launch method and is recommended for testing only.
 
 ## ⚖️ License
 

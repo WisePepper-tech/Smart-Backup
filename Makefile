@@ -8,7 +8,7 @@ SOURCES = main.py manager.py cloud_manager.py scanner.py utils.py
 # WINPATH by default. In CI GitHub Actions, this will be the current directory.
 WINPATH ?= $(PWD)
 
-.PHONY: prepare build local-build run down logs clean
+.PHONY: prepare build local-build run api down logs clean
 
 # Automation: download dependencies if there is no wheels folder
 prepare:
@@ -24,7 +24,7 @@ prepare:
 build: prepare $(SOURCES)
 	docker-compose build
 
-# A team for unbiased verification locally
+# The command for unbiased verification locally
 local-build:
 	docker build --no-cache --pull -t $(IMAGE_NAME) .
 
@@ -42,6 +42,12 @@ run: build
 	done; \
 	echo " MinIO is ready!"; \
 	docker-compose run --rm -v "$$winpath:/data" smart-backup
+
+# Start API service alongside MinIO
+api: build
+	docker-compose up minio api -d
+	@echo "API running at http://localhost:8000"
+	@echo "Health: http://localhost:8000/health"
 
 # Stopping Everything
 down:

@@ -161,10 +161,23 @@ jobs:
         run: |
           pip-audit --strict -r requirements-dev.txt
           pip-audit --strict -r requirements.txt
+          pip-audit --strict -r requirements-sbom.txt
 
       - name: Bandit Scan  # v1.9.4
         if: github.event_name == 'push' || github.event.pull_request.head.repo.fork == false
         run: bandit -r . -ll -ii --exclude ./tests
+
+      - name: Scan Semgrep image before use
+        run: |
+          curl --proto "=https" --tlsv1.2 -fsSL -o trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.69.3/trivy_0.69.3_Linux-64bit.tar.gz
+          echo "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75  trivy.tar.gz" | sha256sum -c
+          tar -xzf trivy.tar.gz trivy
+          ./trivy image \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            semgrep/semgrep@sha256:17668d9bce732a3ba6766131a3275e9493366972dff9eefc01713b6bd811a4fa
 
       - name: Semgrep Security Scan  # semgrep/semgrep:1.154.0-nonroot (INDEX DIGEST)
         run: |
@@ -204,13 +217,20 @@ jobs:
 
       - name: Detect dependency change
         run: |
-          if git diff --name-only origin/${{ github.base_ref }} | grep -E 'requirements|pyproject'; then
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} \
+            | grep -E 'requirements|pyproject' || true)
+          if [ -n "$CHANGED" ]; then
             echo "DEPENDENCY_CHANGED=true" >> $GITHUB_ENV
+            echo "Changed files:"
+            echo "$CHANGED"
           fi
 
-      - name: Warn dependency change
+      - name: Block on dependency change
         if: env.DEPENDENCY_CHANGED == 'true'
-        run: echo "::warning::Dependency change requires review"
+        run: |
+          echo "::error::Dependency change detected — manual review required"
+          echo "::error::Files changed: requirements*.txt or pyproject.toml"
+          exit 1
 
   build:  # Containers
     needs: [security, dependency_guard]
@@ -240,6 +260,9 @@ jobs:
         run: |
           mkdir wheels
           pip download -r requirements.txt -d wheels --require-hashes
+          echo "Downloaded wheels:"
+          ls -la wheels/
+          test -n "$(ls -A wheels/)" || { echo "ERROR: wheels directory is empty"; exit 1; }
 
       - name: Install conftest
         env:

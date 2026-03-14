@@ -29,13 +29,37 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    stdin_open: true # -i
-    tty: true # -t
+    stdin_open: true
+    tty: true
     env_file: .env
     environment:
       - DOCKER_MODE=true
     networks:
       - default
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PIP_FIND_LINKS: /app/wheels
+    image: smart-backup:v1.0.0
+    container_name: smart-backup-api
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: [ "python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000" ]
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - DOCKER_MODE=true
+      - BACKUP_PATH=/data
+    volumes:
+      - backup_data:/data
+    networks:
+      - default
+
 volumes:
   minio_data:
+  backup_data:

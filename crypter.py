@@ -1,32 +1,41 @@
 import os
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
+from argon2.low_level import hash_secret_raw, Type
 
 
 class FileCrypter:
-    def __init__(self, password: str, salt: bytes = None):
-        # If there is no salt, we create it (for backup), if there is, we use it (for recovery)
-        self.salt = salt or os.urandom(16)
+    _TIME_COST = 3
+    _MEMORY_COST = 65536
+    _PARALLELISM = 4
+    _HASH_LEN = 32
+    _SALT_LEN = 16
 
-        # PBKDF2 turns a password into a secure 32-byte key
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
+    def __init__(
+        self,
+        password: str,
+        salt: bytes = None,
+        time_cost: int = None,
+        memory_cost: int = None,
+        parallelism: int = None,
+    ):
+        self.salt = salt or os.urandom(self._SALT_LEN)
+        self.key = hash_secret_raw(
+            secret=password.encode("utf-8"),
             salt=self.salt,
-            iterations=100000,
+            time_cost=time_cost or self._TIME_COST,
+            memory_cost=memory_cost or self._MEMORY_COST,
+            parallelism=parallelism or self._PARALLELISM,
+            hash_len=self._HASH_LEN,
+            type=Type.ID,
         )
-        self.key = kdf.derive(password.encode())
         self.aead = ChaCha20Poly1305(self.key)
 
     def encrypt(self, data: bytes) -> bytes:
         nonce = os.urandom(12)
-        # We encrypt the data. Poly1305 will add a verification tag automatically
         ciphertext = self.aead.encrypt(nonce, data, None)
         return nonce + ciphertext
 
     def decrypt(self, encrypted_data: bytes) -> bytes:
         nonce = encrypted_data[:12]
         ciphertext = encrypted_data[12:]
-        # If the password is incorrect or the file has been changed, an exception will be thrown here.
         return self.aead.decrypt(nonce, ciphertext, None)

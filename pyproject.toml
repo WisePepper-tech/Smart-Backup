@@ -13,7 +13,11 @@ requires-python = ">=3.13"
 dependencies = [
     "cryptography>=42.0.0",
     "boto3>=1.34.0",
-    "python-dotenv>=1.0.0"
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.135.1",
+    "uvicorn>=0.41.0",
+    "slowapi>=0.1.9",
+    "argon2-cffi>=25.1.0"
 ]
 
 [project.scripts]
@@ -22,3 +26,8 @@ smart-backup = "main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 exclude = ["tests*", "docs*"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:slowapi.*",
+]
