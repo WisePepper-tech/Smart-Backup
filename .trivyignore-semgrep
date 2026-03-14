@@ -1,0 +1,11 @@
+# CVE-2026-32597: PyJWT in semgrep image - not exploitable in CI scan context
+# Semgrep does not accept JWT from external sources during code scanning
+CVE-2026-32597
+
+# CVE-2026-23949: jaraco.context vendored in setuptools - not exploitable
+# No untrusted tar archive processing in CI scan workflow
+CVE-2026-23949
+
+# CVE-2026-24049: wheel vendored in setuptools - not exploitable
+# All wheels are pinned with hashes in requirements.txt
+CVE-2026-24049
