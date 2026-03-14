@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from pydantic import ValidationError
+from fastapi.testclient import TestClient
 
 os.environ.setdefault("API_KEY", "test-key-for-ci")
 os.environ.setdefault("BACKUP_PATH", "/tmp/test-backups")
@@ -1175,6 +1176,35 @@ class TestApiValidators(unittest.TestCase):
                     "comment": "x" * 501,
                 }
             )
+
+
+class TestApiEndpoints(unittest.TestCase):
+    def setUp(self):
+        from api import app
+
+        self.client = TestClient(app)
+        self.headers = {"X-API-Key": "test-key-for-ci"}
+
+    def test_health(self):
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+
+    def test_backups_unauthorized(self):
+        response = self.client.get("/backups")
+        self.assertEqual(response.status_code, 403)
+
+    def test_backups_authorized_empty(self):
+        response = self.client.get("/backups", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_backup_source_not_found(self):
+        response = self.client.post(
+            "/backup",
+            headers=self.headers,
+            json={"source_path": "/data/nonexistent", "project_name": "test"},
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

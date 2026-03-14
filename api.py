@@ -79,7 +79,14 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/backups")
+@app.get(
+    "/backup",
+    responses={
+        400: {"description": "Invalid project name"},
+        403: {"description": "Invalid API key"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
 @limiter.limit("30/minute")
 def list_backups(
     request: Request,
@@ -111,14 +118,21 @@ def list_backups(
     return result
 
 
-@app.post("/backup")
+@app.post(
+    "/backup",
+    responses={
+        400: {"description": "Source path not found or not a directory"},
+        403: {"description": "Invalid API key"},
+        500: {"description": "Internal backup error"},
+    },
+)
 @limiter.limit("10/minute")
 def create_backup(
     request: Request,
     req: BackupRequest,
     _=Security(verify_api_key),
 ):
-    source = Path(req.source_path)
+    source = Path(req.source_path)  # NOSONAR(python:S2083)
     if not source.exists():
         raise HTTPException(
             status_code=400,

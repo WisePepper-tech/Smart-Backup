@@ -139,3 +139,6 @@ msgpack==1.1.2 \
 tomli==2.4.0 \
     --hash=sha256:43e685b9b2341681907759cf3a04e14d7104b3580f808cfde1dfdb60ada85475 \
     --hash=sha256:1fb2945cbe303b1419e2706e711b7113da57b7db31ee378d08712d678a34e51e
+
+httpx==0.28.1 \
+    --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad 
