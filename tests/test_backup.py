@@ -1191,7 +1191,11 @@ class TestApiEndpoints(unittest.TestCase):
 
     def test_backups_unauthorized(self):
         response = self.client.get("/backups")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 401)  # no header = 401
+
+    def test_backups_wrong_key(self):
+        response = self.client.get("/backups", headers={"X-API-Key": "wrong"})
+        self.assertEqual(response.status_code, 403)  # wrong key = 403
 
     def test_backups_authorized_empty(self):
         response = self.client.get("/backups", headers=self.headers)
@@ -1200,7 +1204,7 @@ class TestApiEndpoints(unittest.TestCase):
 
     def test_backup_source_not_found(self):
         response = self.client.post(
-            "/backup",
+            "/backups",  # было /backup
             headers=self.headers,
             json={"source_path": "/data/nonexistent", "project_name": "test"},
         )

@@ -80,7 +80,7 @@ def health():
 
 
 @app.get(
-    "/backup",
+    "/backups",
     responses={
         400: {"description": "Invalid project name"},
         403: {"description": "Invalid API key"},
@@ -119,7 +119,7 @@ def list_backups(
 
 
 @app.post(
-    "/backup",
+    "/backups",
     responses={
         400: {"description": "Source path not found or not a directory"},
         403: {"description": "Invalid API key"},
