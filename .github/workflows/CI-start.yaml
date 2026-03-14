@@ -177,13 +177,14 @@ jobs:
             --severity CRITICAL,HIGH \
             --exit-code 1 \
             --ignore-unfixed \
-            semgrep/semgrep@sha256:17668d9bce732a3ba6766131a3275e9493366972dff9eefc01713b6bd811a4fa
+            semgrep/semgrep@sha256:15f7e94fd2312367d6f0feccbe60836fc2359a4cf7c9e3dbd721bef7712f0aec
 
-      - name: Semgrep Security Scan  # semgrep/semgrep:1.154.0-nonroot (INDEX DIGEST)
+      # Semgrep Security Scan  # semgrep/semgrep:1.155.0-nonroot (INDEX DIGEST)
+      - name: Semgrep Security Scan
         run: |
           docker run --rm \
             -v "$PWD:/src" \
-            semgrep/semgrep@sha256:17668d9bce732a3ba6766131a3275e9493366972dff9eefc01713b6bd811a4fa \
+            semgrep/semgrep@sha256:15f7e94fd2312367d6f0feccbe60836fc2359a4cf7c9e3dbd721bef7712f0aec \
             semgrep scan --config auto --error /src
 
       - name: Trivy FS scan  # v0.69.3
