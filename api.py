@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException, status, Security
@@ -12,6 +13,8 @@ from slowapi.errors import RateLimitExceeded
 
 from manager import BackupManager
 from scanner import scan_files
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Smart-Backup API")
 
@@ -53,8 +56,8 @@ class BackupRequest(BaseModel):
         except Exception:
             raise ValueError("Invalid path")
         # Whitelist
-        if not str(path).startswith(str(ALLOWED_SOURCE_BASE)):
-            raise ValueError(f"source_path must be inside {ALLOWED_SOURCE_BASE}")
+        if not path.is_relative_to(ALLOWED_SOURCE_BASE):
+            raise ValueError(f"Source_path must be inside {ALLOWED_SOURCE_BASE}")
         return str(path)
 
     @field_validator("project_name")
@@ -132,11 +135,13 @@ def create_backup(
     req: BackupRequest,
     _=Security(verify_api_key),
 ):
-    source = Path(req.source_path)  # NOSONAR(python:S2083)
+    source = Path(
+        req.source_path
+    )  # NOSONAR(python:S2083) - path validated by field_validator
     if not source.exists():
         raise HTTPException(
             status_code=400,
-            detail=f"Source path not found: {req.source_path}",
+            detail=f"Source path not found",
         )
     if not source.is_dir():
         raise HTTPException(
@@ -155,7 +160,8 @@ def create_backup(
             compress=req.compress,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Backup failed")
+        raise HTTPException(status_code=500, detail="Internal error")
 
     return {
         "status": "ok",

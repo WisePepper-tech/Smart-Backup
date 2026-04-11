@@ -12,6 +12,9 @@ venv/
 .env
 .env.*
 !example.env
+secret.yaml
+*secret.yaml
+secret*.yaml
 
 # Project specific
 test_sandbox/

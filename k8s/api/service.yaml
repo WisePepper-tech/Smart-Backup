@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-backup-api
+  namespace: smart-backup
+spec:
+  selector:
+    app: smart-backup-api
+  ports:
+    - port: 80
+      targetPort: 8000

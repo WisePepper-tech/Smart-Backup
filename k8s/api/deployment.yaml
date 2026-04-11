@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-backup-api
+  namespace: smart-backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smart-backup-api
+  template:
+    metadata:
+      labels:
+        app: smart-backup-api
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/<repo>@sha256:<digest>
+
+        args:
+          - python
+          - -m
+          - uvicorn
+          - api:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+
+        ports:
+          - containerPort: 8000
+
+        env:
+          - name: BACKUP_PATH
+            value: /data
+          - name: DOCKER_MODE
+            value: "true"
+
+        volumeMounts:
+          - name: data
+            mountPath: /data
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "300m"
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backup-data

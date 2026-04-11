@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-backup
+  namespace: smart-backup
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: smart-backup
+  template:
+    metadata:
+      labels:
+        app: smart-backup
+    spec:
+      containers:
+      - name: app
+        image: ghcr.io/<repo>@sha256:<digest>
+
+        env:
+          - name: DOCKER_MODE
+            value: "true"
+          - name: S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: smart-backup-secret
+                key: S3_ENDPOINT
+          - name: S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: smart-backup-secret
+                key: S3_ACCESS_KEY
+          - name: S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: smart-backup-secret
+                key: S3_SECRET_KEY
+
+        volumeMounts:
+          - name: data
+            mountPath: /data
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "300m"
+
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backup-data
